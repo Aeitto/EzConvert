@@ -121,7 +121,58 @@ export function EzConvertProvider({ children }: { children: ReactNode }) {
   });
 
   const [rawData, setRawData] = useState<RawDataItem[] | null>(null);
-  const [processedData, setProcessedData] = useState<ProcessedRow[] | null>(null);
+  
+  // Sample data for testing purposes
+  const sampleData: ProcessedRow[] = [
+    {
+      ProductID: "1001",
+      ProductName: "Smartphone X",
+      Description: "Latest smartphone with advanced features",
+      Price: "799.99",
+      SKU: "SP-X1001",
+      Category: "Electronics",
+      Manufacturer: "TechCorp"
+    },
+    {
+      ProductID: "1002",
+      ProductName: "Bluetooth Headphones",
+      Description: "Wireless noise-cancelling headphones",
+      Price: "149.99",
+      SKU: "BH-2002",
+      Category: "Audio",
+      Manufacturer: "SoundWave"
+    },
+    {
+      ProductID: "1003",
+      ProductName: "Smart Watch",
+      Description: "Fitness tracker with heart rate monitor",
+      Price: "249.99",
+      SKU: "SW-3003",
+      Category: "Wearables",
+      Manufacturer: "TechCorp"
+    },
+    {
+      ProductID: "1004",
+      ProductName: "Laptop Pro",
+      Description: "High-performance laptop for professionals",
+      Price: "1299.99",
+      SKU: "LP-4004",
+      Category: "Computers",
+      Manufacturer: "ComputeX"
+    },
+    {
+      ProductID: "1005",
+      ProductName: "Wireless Mouse",
+      Description: "Ergonomic wireless mouse with long battery life",
+      Price: "39.99",
+      SKU: "WM-5005",
+      Category: "Accessories",
+      Manufacturer: "PeripheralPlus"
+    }
+  ];
+  
+  // Initialize processedData with sample data for testing
+  const [processedData, setProcessedData] = useState<ProcessedRow[] | null>(sampleData);
   
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);

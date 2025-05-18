@@ -1,0 +1,6 @@
+ProductID,ProductName,Description,Price,SKU,Category,Manufacturer
+1001,Smartphone X,Latest smartphone with advanced features,799.99,SP-X1001,Electronics,TechCorp
+1002,Bluetooth Headphones,Wireless noise-cancelling headphones,149.99,BH-2002,Audio,SoundWave
+1003,Smart Watch,Fitness tracker with heart rate monitor,249.99,SW-3003,Wearables,TechCorp
+1004,Laptop Pro,High-performance laptop for professionals,1299.99,LP-4004,Computers,ComputeX
+1005,Wireless Mouse,Ergonomic wireless mouse with long battery life,39.99,WM-5005,Accessories,PeripheralPlus

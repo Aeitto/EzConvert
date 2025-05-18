@@ -1,17 +1,17 @@
 
 "use client";
-import { useMemo } from 'react'; // Removed useState
+import { useMemo, useState } from 'react';
 import { useEzConvert } from '@/contexts/EzConvertContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-import { Eye, AlertTriangle } from 'lucide-react'; // Removed Edit3, Sparkles
-// Removed import for EditDataModal as it's no longer used
-// import type { ProcessedRow } from '@/types/ezconvert'; // This import might not be strictly needed if not used elsewhere in this file
+import { Eye, AlertTriangle, Wrench } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { BuilderScreen } from './BuilderScreen';
 
 export function DataPreviewSection() {
   const { processedData, isLoading, error: processingError } = useEzConvert();
-  // Removed editingCell and suggestingForColumn state and their handlers
+  const [isBuilderOpen, setIsBuilderOpen] = useState(false);
   
   const displayedHeaders = useMemo(() => {
     if (!processedData || processedData.length === 0) {
@@ -75,11 +75,22 @@ export function DataPreviewSection() {
 
   return (
     <Card className="shadow-lg">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-xl">
-          <Eye className="text-primary" /> Data Preview ({processedData.length} rows)
-        </CardTitle>
-        <CardDescription>Review your converted data. Editing and AI suggestions have been removed from this section.</CardDescription>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <div>
+          <CardTitle className="flex items-center gap-2 text-xl">
+            <Eye className="text-primary" /> Data Preview ({processedData.length} rows)
+          </CardTitle>
+          <CardDescription>
+            Review your converted data and use the Builder for advanced editing.
+          </CardDescription>
+        </div>
+        <Button
+          onClick={() => setIsBuilderOpen(true)}
+          className="bg-primary hover:bg-primary/90"
+        >
+          <Wrench className="mr-2 h-4 w-4" />
+          Open Builder
+        </Button>
       </CardHeader>
       <CardContent>
         {displayedHeaders.length > 0 ? (
@@ -122,7 +133,10 @@ export function DataPreviewSection() {
           <p className="text-muted-foreground text-center py-10">No columns with data to display in the preview.</p>
         )}
       </CardContent>
-      {/* Removed EditDataModal rendering */}
+      <BuilderScreen
+        isOpen={isBuilderOpen}
+        onClose={() => setIsBuilderOpen(false)}
+      />
     </Card>
   );
 }

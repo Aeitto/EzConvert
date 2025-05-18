@@ -1,0 +1,124 @@
+{
+  "categories": [
+    {
+      "name": "Locations",
+      "prefixes": [
+        {
+          "label": "New York",
+          "prefix": "NY-",
+          "description": "Products from New York warehouse"
+        },
+        {
+          "label": "Los Angeles",
+          "prefix": "LA-",
+          "description": "Products from Los Angeles warehouse"
+        },
+        {
+          "label": "Chicago",
+          "prefix": "CHI-",
+          "description": "Products from Chicago warehouse"
+        },
+        {
+          "label": "Seattle",
+          "prefix": "SEA-",
+          "description": "Products from Seattle warehouse"
+        },
+        {
+          "label": "Miami",
+          "prefix": "MIA-",
+          "description": "Products from Miami warehouse"
+        }
+      ]
+    },
+    {
+      "name": "Product Types",
+      "prefixes": [
+        {
+          "label": "Electronics",
+          "prefix": "ELEC-",
+          "description": "Electronic products"
+        },
+        {
+          "label": "Clothing",
+          "prefix": "CLO-",
+          "description": "Clothing items"
+        },
+        {
+          "label": "Furniture",
+          "prefix": "FURN-",
+          "description": "Furniture items"
+        },
+        {
+          "label": "Kitchen",
+          "prefix": "KIT-",
+          "description": "Kitchen accessories"
+        },
+        {
+          "label": "Toys",
+          "prefix": "TOY-",
+          "description": "Toys and games"
+        }
+      ]
+    },
+    {
+      "name": "Manufacturers",
+      "prefixes": [
+        {
+          "label": "TechCorp",
+          "prefix": "TC-",
+          "description": "TechCorp manufactured products"
+        },
+        {
+          "label": "FashionBrand",
+          "prefix": "FB-",
+          "description": "FashionBrand products"
+        },
+        {
+          "label": "HomeGoods",
+          "prefix": "HG-",
+          "description": "HomeGoods brand items"
+        },
+        {
+          "label": "SmartTech",
+          "prefix": "ST-",
+          "description": "SmartTech electronic devices"
+        },
+        {
+          "label": "GlobalSupply",
+          "prefix": "GS-",
+          "description": "GlobalSupply inventory"
+        }
+      ]
+    },
+    {
+      "name": "Seasonal",
+      "prefixes": [
+        {
+          "label": "Summer",
+          "prefix": "SUM-",
+          "description": "Summer collection"
+        },
+        {
+          "label": "Winter",
+          "prefix": "WIN-",
+          "description": "Winter collection"
+        },
+        {
+          "label": "Spring",
+          "prefix": "SPR-",
+          "description": "Spring collection"
+        },
+        {
+          "label": "Fall",
+          "prefix": "FALL-",
+          "description": "Fall collection"
+        },
+        {
+          "label": "Holiday",
+          "prefix": "HOL-",
+          "description": "Holiday special items"
+        }
+      ]
+    }
+  ]
+}

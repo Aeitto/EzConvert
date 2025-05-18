@@ -1,0 +1,153 @@
+{
+  "suggestions": [
+    {
+      "category": "Product Information",
+      "headers": [
+        "ProductID",
+        "ProductCode",
+        "ProductName",
+        "ProductTitle",
+        "Title",
+        "Name",
+        "ItemName",
+        "ItemTitle",
+        "SKU",
+        "UPC",
+        "EAN",
+        "ISBN",
+        "GTIN",
+        "MPN"
+      ]
+    },
+    {
+      "category": "Descriptions",
+      "headers": [
+        "Description",
+        "ShortDescription",
+        "LongDescription",
+        "FullDescription",
+        "ProductDescription",
+        "ItemDescription",
+        "Specifications",
+        "Features",
+        "Details",
+        "Overview"
+      ]
+    },
+    {
+      "category": "Pricing",
+      "headers": [
+        "Price",
+        "RetailPrice",
+        "SalePrice",
+        "MSRP",
+        "Cost",
+        "WholesalePrice",
+        "DiscountPrice",
+        "PriceMultiplier",
+        "Currency",
+        "TaxRate"
+      ]
+    },
+    {
+      "category": "Inventory",
+      "headers": [
+        "StockLevel",
+        "Quantity",
+        "InventoryLevel",
+        "InStock",
+        "StockStatus",
+        "Availability",
+        "MinimumOrderQuantity",
+        "MaximumOrderQuantity",
+        "ReorderPoint",
+        "LeadTime"
+      ]
+    },
+    {
+      "category": "Categories",
+      "headers": [
+        "Category",
+        "SubCategory",
+        "Department",
+        "ProductType",
+        "ProductGroup",
+        "Collection",
+        "Series",
+        "Line",
+        "Family"
+      ]
+    },
+    {
+      "category": "Manufacturer",
+      "headers": [
+        "Manufacturer",
+        "Brand",
+        "Vendor",
+        "Supplier",
+        "Producer",
+        "Designer",
+        "Creator",
+        "MadeBy",
+        "Origin",
+        "Country"
+      ]
+    },
+    {
+      "category": "Dimensions",
+      "headers": [
+        "Weight",
+        "Length",
+        "Width",
+        "Height",
+        "Depth",
+        "Dimensions",
+        "Size",
+        "Volume",
+        "Diameter",
+        "PackageWeight",
+        "ShippingWeight"
+      ]
+    },
+    {
+      "category": "Media",
+      "headers": [
+        "ImageURL",
+        "ImageLink",
+        "MainImage",
+        "AdditionalImages",
+        "ImageGallery",
+        "VideoURL",
+        "MediaURL",
+        "Thumbnail"
+      ]
+    },
+    {
+      "category": "URLs",
+      "headers": [
+        "ProductURL",
+        "ProductLink",
+        "ItemURL",
+        "WebLink",
+        "DetailPage"
+      ]
+    },
+    {
+      "category": "Attributes",
+      "headers": [
+        "Color",
+        "Size",
+        "Material",
+        "Style",
+        "Pattern",
+        "Finish",
+        "Gender",
+        "Age",
+        "Condition",
+        "Model",
+        "Year",
+        "Season"
+      ]
+    }
+  ]
+}
