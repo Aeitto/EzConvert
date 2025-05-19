@@ -7,7 +7,10 @@ Develop a web application to convert and standardize data, especially from compl
 ## Active Work
 
 *   Refine the data preview and editing functionality (`src/components/ez-convert/DataPreviewSection.tsx`, `src/components/ez-convert/EditDataModal.tsx`).
-*   Integrate AI into the data mapping for XML configuration auto-detection, based on user provided XML sample.
+*   ✅ Integrate AI into the data mapping for XML configuration auto-detection, based on user provided XML sample.
+    * ✅ Added XML AI Detection feature for automatically detecting XPath mappings
+    * ✅ Implemented client-side XML structure analysis
+    * ✅ Created user-friendly interface for reviewing and customizing detected mappings
 *   Develop robust error handling for file uploads and data processing.
 *   Develop robust Builder, that allows user to perform extensive operations with provided tools. (In Progress)
     * ✅ Added initial Builder UI with Undo, Redo, and Save buttons
@@ -21,6 +24,11 @@ Develop a web application to convert and standardize data, especially from compl
         * ✅ Handles inconsistent input formats (e.g., "1234", "500mm", "10m")
         * ✅ Automatically converts comma-separated values to multiple values
         * ✅ Standardizes output format to "00.00"
+      * ✅ Added Attribute Detection tool for extracting multiple attributes from complex values
+        * ✅ Detects patterns like "5 x max 10W led" and extracts quantity and wattage
+        * ✅ Creates new columns for each detected attribute
+        * ✅ Supports multiple pattern types (quantity & wattage, dimensions, value ranges)
+        * ✅ Allows customization of new column names
 
 ## Backlog
 

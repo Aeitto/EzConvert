@@ -61,6 +61,11 @@ This file tracks the ShadCN components used throughout the EzConvert application
   - Handles inconsistent input formats like "1234", "500mm", "10m", "14cm"
   - Automatically splits comma-separated values into multiple values
   - Formats all outputs to a consistent decimal format (00.00)
+- **Attribute Detection**: Tool for extracting multiple attributes from complex text values
+  - Detects patterns like "5 x max 10W led" and extracts quantity and wattage
+  - Creates new columns for each detected attribute
+  - Allows customization of new column names
+  - Supports multiple pattern types including dimensions and value ranges
 - **Header Swapper**: Tool for renaming column headers
   - Features real-time search for suggested standard headers
   - Easy selection from categorized header suggestions

@@ -203,6 +203,8 @@ export function EzConvertProvider({ children }: { children: ReactNode }) {
 
   const addXmlProfile = (profile: XmlProfile) => {
     setXmlProfiles((prev) => [...prev, profile]);
+    // Automatically select the newly created profile
+    setSelectedXmlProfileId(profile.id);
   };
 
   const updateXmlProfile = (updatedProfile: XmlProfile) => {

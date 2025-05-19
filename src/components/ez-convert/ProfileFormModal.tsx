@@ -25,7 +25,7 @@ const initialFieldMapping: Omit<XmlProfileFieldMapping, 'id'> = {
 };
 
 export function ProfileFormModal({ isOpen, onClose, profile }: ProfileFormModalProps) {
-  const { addXmlProfile, updateXmlProfile, suggestedColumnHeaders } = useEzConvert();
+  const { addXmlProfile, updateXmlProfile, suggestedColumnHeaders, setFileType } = useEzConvert();
   const [name, setName] = useState('');
   const [itemRootPath, setItemRootPath] = useState('');
   const [fieldMappings, setFieldMappings] = useState<XmlProfileFieldMapping[]>([
@@ -80,35 +80,64 @@ export function ProfileFormModal({ isOpen, onClose, profile }: ProfileFormModalP
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !itemRootPath.trim()) {
-      toast({ title: "Validation Error", description: "Profile Name and Item Root Path are required.", variant: "destructive" });
-      return;
-    }
-    if (fieldMappings.some(fm => !fm.sourcePath.trim() || (!fm.isDynamicAttributeMapping && !fm.header.trim()) )) {
-      toast({ title: "Validation Error", description: "All regular field mappings must have a Source Path and a Header name. Dynamic mappings only need Source Path.", variant: "destructive" });
-      return;
-    }
+    try {
+      // Validate required fields
+      if (!name.trim() || !itemRootPath.trim()) {
+        toast({ title: "Validation Error", description: "Profile Name and Item Root Path are required.", variant: "destructive" });
+        return;
+      }
+      
+      // Validate field mappings
+      if (fieldMappings.some(fm => !fm.sourcePath.trim() || (!fm.isDynamicAttributeMapping && !fm.header.trim()) )) {
+        toast({ title: "Validation Error", description: "All regular field mappings must have a Source Path and a Header name. Dynamic mappings only need Source Path.", variant: "destructive" });
+        return;
+      }
+      
+      // Validate that there is at least one field mapping
+      if (fieldMappings.length === 0) {
+        toast({ title: "Validation Error", description: "At least one field mapping is required.", variant: "destructive" });
+        return;
+      }
 
-    const newProfileData: Omit<XmlProfile, 'id' | 'createdAt'> = {
-      name,
-      itemRootPath,
-      fieldMappings: fieldMappings.map(fm => ({
-        ...fm, 
-        id: fm.id || crypto.randomUUID(),
-        isDynamicAttributeMapping: fm.isDynamicAttributeMapping || false,
-        // If dynamic and header is empty, ensure it's an empty string not undefined
-        header: fm.header || '', 
-      })),
-    };
-
-    if (profile) {
-      updateXmlProfile({ ...profile, ...newProfileData });
-      toast({ title: "Profile Updated", description: `Profile "${name}" has been updated.` });
-    } else {
-      addXmlProfile({ ...newProfileData, id: crypto.randomUUID(), createdAt: new Date().toISOString() });
-      toast({ title: "Profile Created", description: `Profile "${name}" has been created.` });
+      // Create or update the profile
+      const profileData: XmlProfile = {
+        // Ensure we generate a new UUID for new profiles (including AI detected ones with empty id)
+        id: (profile?.id && profile.id.trim()) ? profile.id : crypto.randomUUID(),
+        name,
+        itemRootPath,
+        fieldMappings: fieldMappings.map(fm => ({
+          ...fm,
+          id: fm.id || crypto.randomUUID(),
+          isDynamicAttributeMapping: fm.isDynamicAttributeMapping || false,
+          // If dynamic and header is empty, ensure it's an empty string not undefined
+          header: fm.header || '',
+        })),
+        createdAt: profile?.createdAt || new Date().toISOString()
+      };
+      
+      // Check if we're updating an existing profile with a valid ID
+      if (profile?.id && profile.id.trim()) {
+        updateXmlProfile(profileData);
+        toast({ title: "Profile Updated", description: `The XML profile "${name}" has been updated.` });
+      } else {
+        // This handles both new profiles and AI-detected profiles with empty IDs
+        addXmlProfile(profileData);
+        toast({ title: "Profile Created", description: `The XML profile "${name}" has been created.` });
+      }
+      
+      // Set file type to XML since we're dealing with XML profiles
+      setFileType('xml');
+      
+      // Close the modal
+      onClose();
+    } catch (error) {
+      console.error("Error saving profile:", error);
+      toast({ 
+        title: "Error Saving Profile", 
+        description: "An unexpected error occurred while saving the profile. Please try again.", 
+        variant: "destructive" 
+      });
     }
-    onClose();
   };
 
   if (!isOpen) return null;

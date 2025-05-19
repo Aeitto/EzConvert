@@ -7,10 +7,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Undo2, Redo2, Save, X, ArrowLeft, Shuffle, Edit2, Tag, RulerIcon } from 'lucide-react';
+import { Undo2, Redo2, Save, X, ArrowLeft, Shuffle, Edit2, Tag, RulerIcon, SplitSquareVertical } from 'lucide-react';
 import { SwapperTool } from './tools/SwapperTool';
 import { PrefixerTool } from './tools/PrefixerTool';
 import { UnitConverterTool } from './tools/UnitConverterTool';
+import { AttributeDetectionTool } from './tools/AttributeDetectionTool';
 import { HeaderSwapperTool } from './HeaderSwapperTool';
 import { useToast } from '@/hooks/use-toast';
 import type { ProcessedRow } from '@/types/ezconvert';
@@ -31,6 +32,7 @@ export function BuilderScreen({ isOpen, onClose }: BuilderScreenProps) {
   const [isSwapperOpen, setIsSwapperOpen] = useState<boolean>(false);
   const [isPrefixerOpen, setIsPrefixerOpen] = useState<boolean>(false);
   const [isUnitConverterOpen, setIsUnitConverterOpen] = useState<boolean>(false);
+  const [isAttributeDetectionOpen, setIsAttributeDetectionOpen] = useState<boolean>(false);
   const [isHeaderSwapperOpen, setIsHeaderSwapperOpen] = useState<boolean>(false);
   const [currentHeaderToSwap, setCurrentHeaderToSwap] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -217,6 +219,17 @@ export function BuilderScreen({ isOpen, onClose }: BuilderScreenProps) {
             >
               <RulerIcon className="h-4 w-4 mr-2" />
               Unit Converter
+            </Button>
+            
+            <Button
+              variant="outline"
+              onClick={() => setIsAttributeDetectionOpen(true)}
+              className="flex items-center ml-2"
+              title="Attribute Detection"
+              disabled={isLoading}
+            >
+              <SplitSquareVertical className="h-4 w-4 mr-2" />
+              Attribute Detection
             </Button>
             
             <div className="border-l h-8 mx-2" />
@@ -419,6 +432,48 @@ export function BuilderScreen({ isOpen, onClose }: BuilderScreenProps) {
           toast({
             title: "Unit Conversion Applied",
             description: `Successfully converted values in ${columnId} column.`
+          });
+        }}
+      />
+
+      {/* Attribute Detection Tool */}
+      <AttributeDetectionTool
+        isOpen={isAttributeDetectionOpen}
+        onClose={() => setIsAttributeDetectionOpen(false)}
+        data={currentData || []}
+        onApplyAttributeDetection={(sourceColumnId, detectedAttributes) => {
+          if (!currentData) return;
+          
+          // Create a new array of data with the additional columns
+          let newData = [...currentData];
+          
+          // Add new columns with extracted attribute values
+          Object.entries(detectedAttributes).forEach(([attrKey, attrData]) => {
+            const { columnName, values } = attrData;
+            
+            // Add the new column to each row
+            newData = newData.map((row, rowIndex) => {
+              // If we have a value for this row, add it
+              if (values[rowIndex]) {
+                return {
+                  ...row,
+                  [columnName]: values[rowIndex]
+                };
+              }
+              // Otherwise, add an empty string
+              return {
+                ...row,
+                [columnName]: ''
+              };
+            });
+          });
+          
+          setCurrentData(newData);
+          addToHistory(newData);
+          
+          toast({
+            title: "Attributes Extracted",
+            description: `Successfully extracted attributes from ${sourceColumnId} column.`
           });
         }}
       />

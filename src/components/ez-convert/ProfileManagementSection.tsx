@@ -5,10 +5,10 @@ import { useEzConvert } from '@/contexts/EzConvertContext';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Settings2, PlusCircle, Edit3, Trash2, AlertTriangle } from 'lucide-react'; // Removed Sparkles
+import { Settings2, PlusCircle, Edit3, Trash2, AlertTriangle, Sparkles } from 'lucide-react';
 import { ProfileFormModal } from './ProfileFormModal';
-// import { AutoDetectConfigModal } from './AutoDetectConfigModal'; // Removed
-import type { XmlProfile } from '@/types/ezconvert';
+import { XmlAiDetectionModal } from './XmlAiDetectionModal';
+import type { XmlProfile, XmlProfileFieldMapping } from '@/types/ezconvert';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,6 +27,7 @@ import { useToast } from '@/hooks/use-toast';
 export function ProfileManagementSection() {
   const { 
     fileType, 
+    setFileType,
     xmlProfiles, 
     selectedXmlProfileId, 
     setSelectedXmlProfileId, 
@@ -35,7 +36,7 @@ export function ProfileManagementSection() {
   } = useEzConvert();
   
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
-  // const [isAutoDetectModalOpen, setIsAutoDetectModalOpen] = useState(false); // Removed
+  const [isAiDetectionModalOpen, setIsAiDetectionModalOpen] = useState(false);
   const [editingProfile, setEditingProfile] = useState<XmlProfile | null>(null);
   const { toast } = useToast();
 
@@ -57,7 +58,30 @@ export function ProfileManagementSection() {
     toast({ title: "Profile Deleted", description: "The XML profile has been deleted." });
   };
 
-  // Removed handleAutoDetect and handleConfigDetected functions
+  const handleOpenAiDetection = () => {
+    // Ensure file type is set to 'xml' when using AI detection
+    setFileType('xml');
+    setIsAiDetectionModalOpen(true);
+  };
+
+  const handleDetectionComplete = (rootPath: string, fieldMappings: XmlProfileFieldMapping[]) => {
+    // Create a new profile with the detected structure
+    setEditingProfile({
+      id: '',
+      name: 'AI Detected Profile',
+      itemRootPath: rootPath,
+      fieldMappings,
+      createdAt: new Date().toISOString()
+    });
+    
+    // Open the profile form to let the user customize and save the profile
+    setIsProfileModalOpen(true);
+    
+    toast({ 
+      title: "AI Detection Complete", 
+      description: `Successfully detected ${fieldMappings.length} field mappings. Please review and save the profile.` 
+    });
+  };
 
   if (fileType !== 'xml') {
     return null; 
@@ -128,7 +152,9 @@ export function ProfileManagementSection() {
           <Button onClick={handleAddNewProfile} variant="outline" className="w-full">
             <PlusCircle size={16} className="mr-2" /> Create New Profile
           </Button>
-          {/* Removed Auto-detect button */}
+          <Button onClick={handleOpenAiDetection} variant="outline" className="w-full">
+            <Sparkles size={16} className="mr-2" /> AI Detect Structure
+          </Button>
         </div>
       </CardContent>
 
@@ -137,7 +163,12 @@ export function ProfileManagementSection() {
         onClose={() => setIsProfileModalOpen(false)}
         profile={editingProfile}
       />
-      {/* Removed AutoDetectConfigModal rendering */}
+      
+      <XmlAiDetectionModal
+        isOpen={isAiDetectionModalOpen}
+        onClose={() => setIsAiDetectionModalOpen(false)}
+        onDetectionComplete={handleDetectionComplete}
+      />
     </Card>
   );
 }
