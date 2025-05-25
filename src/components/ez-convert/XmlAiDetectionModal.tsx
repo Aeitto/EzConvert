@@ -1,5 +1,5 @@
 "use client";
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -9,7 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Sparkles, Save, X, AlertCircle, Check, Loader2 } from 'lucide-react';
+import { Sparkles, Save, X, AlertCircle, Check, Loader2, Info, ListTree, Key, FileJson } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { generateUUID } from '@/lib/utils';
 import type { XmlProfileFieldMapping } from '@/types/ezconvert';
@@ -23,6 +23,37 @@ interface XmlAiDetectionModalProps {
 interface ApiXPathSuggestion {
   fieldName: string;
   xpath: string;
+  description?: string;
+  isDynamicKeyValuePair?: boolean;
+}
+
+interface AiDynamicBlockKeySource {
+  from: 'attribute' | 'childElementText' | 'repeatingElementText';
+  identifier: string;
+}
+
+interface AiDynamicBlockValueSource {
+  from: 'attribute' | 'childElementText' | 'repeatingElementText';
+  identifier?: string;
+}
+
+interface AiDynamicBlockDefinition {
+  repeatingElementXPath: string;
+  keySource: AiDynamicBlockKeySource;
+  valueSource: AiDynamicBlockValueSource;
+  description?: string;
+  exampleMappings?: ApiXPathSuggestion[];
+}
+
+interface AiApiResponse {
+  itemRootPath?: string;
+  suggestedMappings?: ApiXPathSuggestion[];
+  dynamicBlockMapping?: AiDynamicBlockDefinition;
+  promptModeUsed: 'detailedFields' | 'dynamicBlock';
+  error?: string;
+  rawAiResponse?: string;
+  model?: string;
+  provider?: string;
 }
 
 export function XmlAiDetectionModal({ 
@@ -33,50 +64,58 @@ export function XmlAiDetectionModal({
   const { toast } = useToast();
   const [xmlSample, setXmlSample] = useState<string>('');
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
-  const [detectedRootPath, setDetectedRootPath] = useState<string>('');
-  const [detectedMappings, setDetectedMappings] = useState<XmlProfileFieldMapping[]>([]);
-  const [isDetectionComplete, setIsDetectionComplete] = useState<boolean>(false);
+  const [detectedMappings, setDetectedMappings] = useState<ApiXPathSuggestion[]>([]);
+  const [currentDynamicBlock, setCurrentDynamicBlock] = useState<AiDynamicBlockDefinition | null>(null);
+  const [selectedMappings, setSelectedMappings] = useState<Record<string, boolean>>({});
+  const [itemRootPath, setItemRootPath] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [usedModel, setUsedModel] = useState<string | null>(null);
   const [usedProvider, setUsedProvider] = useState<string | null>(null);
   const [selectedProvider, setSelectedProvider] = useState<'openrouter' | 'requesty'>('openrouter');
+  const [detectionMode, setDetectionMode] = useState<'detailedFields' | 'dynamicBlock'>('detailedFields');
 
-  const handleXmlSampleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setXmlSample(e.target.value);
-    setIsDetectionComplete(false);
-    setDetectedRootPath('');
-    setDetectedMappings([]);
-    setError(null);
-  };
+  const isDetectionComplete = (detectionMode === 'detailedFields' && detectedMappings.length > 0) || 
+                            (detectionMode === 'dynamicBlock' && (detectedMappings.length > 0 || currentDynamicBlock !== null)) ||
+                            error !== null;
 
-  const handleProviderChange = (value: 'openrouter' | 'requesty') => {
-    setSelectedProvider(value);
-    setIsDetectionComplete(false);
+  useEffect(() => {
     setDetectedMappings([]);
-    setDetectedRootPath('');
+    setCurrentDynamicBlock(null);
     setError(null);
     setUsedModel(null);
     setUsedProvider(null);
+    setSelectedMappings({});
+  }, [detectionMode]);
+
+  const handleXmlSampleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setXmlSample(e.target.value);
+    if (detectedMappings.length > 0 || currentDynamicBlock || error) {
+      setDetectedMappings([]);
+      setCurrentDynamicBlock(null);
+      setError(null);
+      setUsedModel(null);
+      setUsedProvider(null);
+      setSelectedMappings({});
+    }
   };
 
-  const handleDetectStructure = async () => {
-    if (!xmlSample.trim()) {
+  const handleAnalyzeXml = async () => {
+    if (xmlSample.length < 50) {
       toast({
-        title: "Error",
-        description: "Please provide an XML sample to analyze.",
-        variant: "destructive"
+        variant: 'destructive',
+        title: 'XML Sample Too Short',
+        description: 'Please provide an XML sample of at least 50 characters.',
       });
-      setError("Please provide an XML sample to analyze.");
       return;
     }
 
     setIsAnalyzing(true);
     setError(null);
     setDetectedMappings([]);
-    setDetectedRootPath('');
-    setIsDetectionComplete(false);
+    setCurrentDynamicBlock(null);
     setUsedModel(null);
     setUsedProvider(null);
+    setSelectedMappings({});
 
     try {
       const response = await fetch('/api/detect-xml-structure', {
@@ -84,60 +123,75 @@ export function XmlAiDetectionModal({
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           xmlSample,
-          provider: selectedProvider 
+          apiProvider: selectedProvider === 'requesty' ? 'requesty.ai' : 'openrouter.ai',
+          detectionMode,
         }),
       });
 
+      const data: AiApiResponse = await response.json();
+
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || errorData.details || 'Failed to detect XML structure');
+        setError(data.error || `API request failed with status ${response.status}`);
+        toast({
+          variant: 'destructive',
+          title: 'Analysis Failed',
+          description: data.error || `API request failed. Raw: ${data.rawAiResponse?.substring(0,100)}`,
+        });
+        setIsAnalyzing(false);
+        return;
       }
 
-      const result = await response.json();
-      
-      // Handle the new response format that includes data, model and provider
-      const suggestions: ApiXPathSuggestion[] = result.data.mappings;
-      const rootPath = result.data.itemRootPath || '';
-      const modelUsed = result.model || 'Unknown';
-      const providerUsed = result.provider || null;
-      
-      setUsedModel(modelUsed);
-      setUsedProvider(providerUsed);
+      if (data.error) {
+        setError(data.error);
+        toast({
+          variant: 'destructive',
+          title: 'Analysis Error',
+          description: data.error,
+        });
+      } else {
+        setUsedModel(data.model || 'N/A');
+        setUsedProvider(data.provider || selectedProvider);
 
-      // Convert API response to the format expected by the application
-      const newMappings: XmlProfileFieldMapping[] = suggestions.map((suggestion: ApiXPathSuggestion) => ({
-        id: generateUUID(),
-        sourcePath: suggestion.xpath,
-        header: suggestion.fieldName,
-        isDynamicAttributeMapping: false,
-      }));
+        let finalMappings: ApiXPathSuggestion[] = [];
 
-      setDetectedRootPath(rootPath);
-      setDetectedMappings(newMappings);
-      setIsDetectionComplete(true);
+        // Always populate finalMappings (for the main table) from suggestedMappings if available
+        if (data.suggestedMappings && data.suggestedMappings.length > 0) {
+          finalMappings = data.suggestedMappings;
+        }
 
-      toast({
-        title: "XML Analysis Complete",
-        description: `AI analysis complete. Found ${newMappings.length} potential fields.`,
-      });
-
-    } catch (err: any) {
-      console.error("Error during AI XML structure detection:", err);
-      const errorMessage = err.message || "An unknown error occurred during AI analysis.";
+        // Handle dynamic block specific data
+        if (data.promptModeUsed === 'dynamicBlock' && data.dynamicBlockMapping) {
+          setCurrentDynamicBlock(data.dynamicBlockMapping);
+          // The 'exampleMappings' from dynamicBlockMapping are displayed in their own section,
+          // not in the main 'detectedMappings' table.
+        } else {
+          // If not in dynamicBlock mode or no dynamicBlockMapping, ensure it's cleared.
+          setCurrentDynamicBlock(null);
+        }
+        
+        setDetectedMappings(finalMappings);
+        setItemRootPath(data.itemRootPath || '');
+        toast({
+          title: 'Analysis Complete',
+          description: `XML structure analyzed using ${data.promptModeUsed} mode. Review the suggestions.`,
+        });
+      }
+    } catch (err) {
+      console.error('Analysis API call error:', err);
+      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
       setError(errorMessage);
       toast({
-        title: "AI Analysis Failed",
-        description: errorMessage,
-        variant: "destructive",
+        variant: 'destructive',
+        title: 'Analysis Failed',
+        description: `An error occurred: ${errorMessage}`,
       });
-    } finally {
-      setIsAnalyzing(false);
     }
+    setIsAnalyzing(false);
   };
 
-  const handleMappingChange = (index: number, field: keyof XmlProfileFieldMapping, value: any) => {
+  const handleMappingChange = (index: number, field: keyof ApiXPathSuggestion, value: any) => {
     setDetectedMappings(currentMappings =>
       currentMappings.map((mapping, i) =>
         i === index ? { ...mapping, [field]: value } : mapping
@@ -145,31 +199,66 @@ export function XmlAiDetectionModal({
     );
   };
 
+  const handleToggleSelect = (key: string, isSelected: boolean) => {
+    setSelectedMappings(currentSelected => ({ ...currentSelected, [key]: isSelected }));
+  };
+
+  const handleToggleSelectAll = (select: boolean) => {
+    const newSelectedMappings: Record<string, boolean> = {};
+    detectedMappings.forEach(mapping => {
+      newSelectedMappings[`${mapping.fieldName}_${mapping.xpath}`] = select;
+    });
+    setSelectedMappings(newSelectedMappings);
+  };
+
   const handleApplyDetection = () => {
-    if (!detectedRootPath || detectedMappings.length === 0) {
+    const mappingsToApply: XmlProfileFieldMapping[] = Object.entries(selectedMappings)
+      .filter(([,isSelected]) => isSelected)
+      .map(([key]) => {
+        // Reconstruct the original mapping object from the key or find it in detectedMappings
+        // This assumes key is `fieldName_xpath`
+        const parts = key.split('_');
+        const fieldName = parts.slice(0, -1).join('_'); // handle fieldNames that might have underscores
+        const xpath = parts.slice(-1)[0];
+        const originalMapping = detectedMappings.find(m => m.fieldName === fieldName && m.xpath === xpath);
+        if (!originalMapping) return null; // Should not happen if keys are managed correctly
+
+        return {
+          id: generateUUID(),
+          sourcePath: originalMapping.xpath,
+          header: originalMapping.fieldName,
+          description: originalMapping.description || '',
+          valueType: 'string', // Default or determine from XML/AI later
+          transformations: [],
+          isDynamicAttributeMapping: originalMapping.isDynamicKeyValuePair || false,
+        };
+      })
+      .filter(Boolean) as XmlProfileFieldMapping[];
+
+    if (mappingsToApply.length === 0 && !currentDynamicBlock) { 
       toast({
-        title: "Error",
-        description: "No valid detection results to apply.",
-        variant: "destructive"
+        title: "No Mappings Selected",
+        description: "Please select at least one mapping to apply, or a dynamic block if applicable.",
+        variant: "destructive",
       });
       return;
     }
 
-    onDetectionComplete(detectedRootPath, detectedMappings);
+    // Pass itemRootPath and the selected/generated mappings
+    // If currentDynamicBlock is meant to be translated into mappings here, that logic needs to be added.
+    // For now, it's just passing the selected suggestedMappings.
+    onDetectionComplete(itemRootPath, mappingsToApply);
     onClose();
-    
-    toast({
-      title: "Detection Applied",
-      description: "The detected XML structure has been applied to your profile."
-    });
   };
 
   const handleReset = () => {
     setXmlSample('');
-    setIsDetectionComplete(false);
-    setDetectedRootPath('');
     setDetectedMappings([]);
+    setCurrentDynamicBlock(null);
     setError(null);
+    setUsedModel(null);
+    setUsedProvider(null);
+    setSelectedMappings({});
   };
 
   return (
@@ -189,25 +278,38 @@ export function XmlAiDetectionModal({
           
           <div className="space-y-4">
             <div>
-              <Label htmlFor="api-provider" className="text-sm font-medium">
-                Choose AI Provider
-              </Label>
+              <Label htmlFor="api-provider" className="text-sm font-medium mb-1 block">API Provider</Label>
               <RadioGroup
+                id="api-provider"
                 value={selectedProvider}
-                onValueChange={(value) => handleProviderChange(value as 'openrouter' | 'requesty')}
-                className="flex items-center space-x-4 mb-4"
+                onValueChange={(value: 'openrouter' | 'requesty') => setSelectedProvider(value)}
+                className="flex space-x-2"
               >
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-1">
                   <RadioGroupItem value="openrouter" id="openrouter" />
-                  <Label htmlFor="openrouter" className="text-sm">
-                    OpenRouter (Free Models)
-                  </Label>
+                  <Label htmlFor="openrouter" className="font-normal text-sm">OpenRouter (Free/Flexible)</Label>
                 </div>
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-1">
                   <RadioGroupItem value="requesty" id="requesty" />
-                  <Label htmlFor="requesty" className="text-sm">
-                    Requesty.ai (Paid Models)
-                  </Label>
+                  <Label htmlFor="requesty" className="font-normal text-sm">Requesty.ai (Optimized)</Label>
+                </div>
+              </RadioGroup>
+            </div>
+            <div>
+              <Label htmlFor="detection-mode" className="text-sm font-medium mb-1 block">Detection Mode</Label>
+              <RadioGroup
+                id="detection-mode"
+                value={detectionMode}
+                onValueChange={(value: 'detailedFields' | 'dynamicBlock') => setDetectionMode(value as 'detailedFields' | 'dynamicBlock')}
+                className="flex space-x-2"
+              >
+                <div className="flex items-center space-x-1">
+                  <RadioGroupItem value="detailedFields" id="detailed-mode" />
+                  <Label htmlFor="detailed-mode" className="font-normal text-sm">Detailed Fields</Label>
+                </div>
+                <div className="flex items-center space-x-1">
+                  <RadioGroupItem value="dynamicBlock" id="dynamic-block-mode" />
+                  <Label htmlFor="dynamic-block-mode" className="font-normal text-sm">Dynamic Blocks</Label>
                 </div>
               </RadioGroup>
             </div>
@@ -233,7 +335,7 @@ export function XmlAiDetectionModal({
                   Clear
                 </Button>
                 <Button 
-                  onClick={handleDetectStructure}
+                  onClick={handleAnalyzeXml}
                   disabled={isAnalyzing || !xmlSample}
                 >
                   {isAnalyzing ? (
@@ -244,7 +346,7 @@ export function XmlAiDetectionModal({
                   ) : (
                     <>
                       <Sparkles className="mr-2 h-4 w-4" />
-                      Detect Structure
+                      Analyze XML Sample
                     </>
                   )}
                 </Button>
@@ -269,72 +371,142 @@ export function XmlAiDetectionModal({
                     Review and customize the detected XML structure before applying it to your profile.
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="root-path">Item Root Path (XPath)</Label>
-                    <Input 
-                      id="root-path"
-                      value={detectedRootPath}
-                      onChange={(e) => setDetectedRootPath(e.target.value)}
-                      className="font-mono"
-                    />
-                    {isDetectionComplete && (usedModel || usedProvider) && (
-                      <p className="text-xs text-muted-foreground text-center">
-                        Structure detected using {usedProvider && <span>provider: <span className="font-semibold">{usedProvider}</span></span>}
-                        {usedProvider && usedModel && <span> | </span>}
-                        {usedModel && <span>model: <span className="font-mono">{usedModel}</span></span>}
-                      </p>
-                    )}
+                <CardContent>
+                  <div className="mb-4">
+                    <p className="text-sm text-muted-foreground">
+                      Detected Item Root Path: <code className="bg-muted px-1 py-0.5 rounded text-xs">{itemRootPath || 'N/A'}</code>
+                    </p>
                   </div>
-                  
-                  <div className="space-y-2">
-                    <Label>Detected Field Mappings</Label>
-                    <ScrollArea className="h-[300px] border rounded-md p-4">
-                      <div className="space-y-6">
-                        {detectedMappings.map((mapping, index) => (
-                          <div key={mapping.id} className="space-y-2 pb-4 border-b last:border-b-0 last:pb-0">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                              <div className="space-y-1">
-                                <Label htmlFor={`source-path-${index}`} className="text-xs">Source Path (XPath)</Label>
-                                <Input
-                                  id={`source-path-${index}`}
-                                  value={mapping.sourcePath}
-                                  onChange={(e) => handleMappingChange(index, 'sourcePath', e.target.value)}
-                                  className="font-mono text-sm"
-                                />
-                              </div>
-                              <div className="space-y-1">
-                                <Label htmlFor={`header-${index}`} className="text-xs">Column Header</Label>
-                                <Input
-                                  id={`header-${index}`}
-                                  value={mapping.header}
-                                  onChange={(e) => handleMappingChange(index, 'header', e.target.value)}
-                                  className="text-sm"
-                                  disabled={mapping.isDynamicAttributeMapping}
-                                />
-                              </div>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <Checkbox
-                                id={`dynamic-mapping-${index}`}
-                                checked={mapping.isDynamicAttributeMapping}
-                                onCheckedChange={(checked) => handleMappingChange(index, 'isDynamicAttributeMapping', !!checked)}
+                  <ScrollArea className="h-[300px]">
+                    <div className="space-y-3">
+                      {detectedMappings.map((mapping, index) => (
+                        <div key={index} className="p-3 border rounded-md bg-background/70 space-y-2">
+                          <div className="grid grid-cols-2 gap-x-4 items-start">
+                            <div className="space-y-1">
+                              <Label htmlFor={`source-path-${index}`} className="text-xs">Source Path (XPath)</Label>
+                              <Input
+                                id={`source-path-${index}`}
+                                value={mapping.xpath}
+                                onChange={(e) => handleMappingChange(index, 'xpath', e.target.value)}
+                                className="font-mono text-sm"
                               />
-                              <Label
-                                htmlFor={`dynamic-mapping-${index}`}
-                                className="text-xs font-normal text-muted-foreground"
-                              >
-                                Map as Dynamic Attributes (uses 'name' attr for header, text content for value)
-                              </Label>
+                            </div>
+                            <div className="space-y-1">
+                              <Label htmlFor={`header-${index}`} className="text-xs">Column Header</Label>
+                              <Input
+                                id={`header-${index}`}
+                                value={mapping.fieldName}
+                                onChange={(e) => handleMappingChange(index, 'fieldName', e.target.value)}
+                                className="text-sm"
+                                disabled={mapping.isDynamicKeyValuePair}
+                              />
                             </div>
                           </div>
-                        ))}
-                      </div>
-                    </ScrollArea>
-                  </div>
+                          <div className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`dynamic-mapping-${index}`}
+                              checked={mapping.isDynamicKeyValuePair}
+                              onCheckedChange={(checkedState) => handleMappingChange(index, 'isDynamicKeyValuePair', checkedState === true)}
+                            />
+                            <Label
+                              htmlFor={`dynamic-mapping-${index}`}
+                              className="text-xs font-normal text-muted-foreground"
+                            >
+                              Map as Dynamic Attributes (uses 'name' attr for header, text content for value)
+                            </Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`select-mapping-${index}`}
+                              checked={selectedMappings[`${mapping.fieldName}_${mapping.xpath}`] || false}
+                              onCheckedChange={(checkedState) => handleToggleSelect(`${mapping.fieldName}_${mapping.xpath}`, checkedState === true)}
+                            />
+                            <Label
+                              htmlFor={`select-mapping-${index}`}
+                              className="text-xs font-normal text-muted-foreground"
+                            >
+                              Select for Application
+                            </Label>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
                 </CardContent>
               </Card>
             )}
+
+            {isDetectionComplete && detectionMode === 'dynamicBlock' && currentDynamicBlock && !error && (
+              <Card className="mt-4 bg-background/50 backdrop-blur-sm">
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center">
+                    <ListTree className="mr-2 h-5 w-5 text-primary" /> Detected Dynamic Attribute Block Definition
+                  </CardTitle>
+                  <CardDescription>
+                    The AI has identified the following pattern for dynamic key-value attributes. 
+                    You can apply this pattern to your profile. Example mappings below are for illustration.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-sm space-y-2 p-3 border rounded-md bg-background/80">
+                    <p>
+                      <strong className="font-medium">Repeating Element XPath:</strong>
+                      <br />
+                      <code className="bg-muted px-2 py-1 rounded text-xs block mt-1">{currentDynamicBlock.repeatingElementXPath}</code>
+                    </p>
+                    <div className="grid grid-cols-2 gap-4 mt-2">
+                      <div className="p-2 border-l-2 border-blue-500 bg-blue-500/10 rounded-r-md">
+                        <p className="flex items-center font-semibold"><Key className="mr-2 h-4 w-4 text-blue-700" />Key Source:</p>
+                        <p className="ml-1 mt-1 text-xs">From: <code className="bg-muted px-1 py-0.5 rounded">{currentDynamicBlock.keySource.from}</code></p>
+                        {currentDynamicBlock.keySource.identifier && 
+                          <p className="ml-1 text-xs">Identifier: <code className="bg-muted px-1 py-0.5 rounded">{currentDynamicBlock.keySource.identifier}</code></p>}
+                      </div>
+                      <div className="p-2 border-l-2 border-green-500 bg-green-500/10 rounded-r-md">
+                        <p className="flex items-center font-semibold"><FileJson className="mr-2 h-4 w-4 text-green-700" />Value Source:</p>
+                        <p className="ml-1 mt-1 text-xs">From: <code className="bg-muted px-1 py-0.5 rounded">{currentDynamicBlock.valueSource.from}</code></p>
+                        {currentDynamicBlock.valueSource.identifier && 
+                          <p className="ml-1 text-xs">Identifier: <code className="bg-muted px-1 py-0.5 rounded">{currentDynamicBlock.valueSource.identifier}</code></p>}
+                      </div>
+                    </div>
+                    {currentDynamicBlock.description && 
+                      <p className="mt-2 text-xs text-muted-foreground italic">Note: {currentDynamicBlock.description}</p>}
+                  </div>
+
+                  {currentDynamicBlock.exampleMappings && currentDynamicBlock.exampleMappings.length > 0 && (
+                    <div className="mt-3">
+                      <h5 className="text-xs font-semibold text-muted-foreground mb-1">Example Mappings (Illustrative):</h5>
+                      <ScrollArea className="h-[100px] border rounded-md p-2 bg-background/50">
+                        <div className="space-y-1">
+                          {currentDynamicBlock.exampleMappings.map((exMap, idx) => (
+                            <div key={idx} className="text-xs p-1 rounded bg-muted/50">
+                              <span className="font-medium">{exMap.fieldName}:</span> <code className="text-blue-600">{exMap.xpath}</code>
+                              {exMap.isDynamicKeyValuePair && <Check className="inline ml-1 h-3 w-3 text-green-600" />}
+                            </div>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {isDetectionComplete && detectionMode === 'dynamicBlock' && !currentDynamicBlock && !error && (
+              <Card className="mt-4 bg-background/50 backdrop-blur-sm">
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center">
+                    <Info className="mr-2 h-5 w-5 text-primary" /> No Dynamic Blocks Found
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">
+                    The AI did not identify any dynamic attribute blocks in the provided XML sample using the current mode.
+                    You can try the "Detailed Fields" mode or adjust your XML sample.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+
           </div>
         </div>
         
@@ -342,7 +514,7 @@ export function XmlAiDetectionModal({
           <Button variant="outline" onClick={onClose}>
             <X className="mr-2 h-4 w-4" /> Cancel
           </Button>
-          {isDetectionComplete && (
+          {isDetectionComplete && !error && (detectedMappings.length > 0 || currentDynamicBlock !== null) && (
             <Button onClick={handleApplyDetection}>
               <Check className="mr-2 h-4 w-4" /> Apply Detection
             </Button>

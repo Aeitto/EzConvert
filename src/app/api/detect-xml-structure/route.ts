@@ -1,211 +1,117 @@
+// src/app/api/detect-xml-structure/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { streamText, CoreMessage, generateObject } from 'ai';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider'; // Import for OpenRouter
 
-// Helper function to extract/clean JSON from a string
-function extractJsonFromString(str: string | null | undefined): string {
-  if (!str) {
-    return ''; // Return empty string if input is null, undefined, or empty
-  }
+// --- Constants for API Providers ---
+const REQUESTY_AI_PROVIDER = 'requesty.ai';
+const OPENROUTER_AI_PROVIDER = 'openrouter.ai';
 
-  let potentialJson = str;
+// --- Environment Variables ---
+const REQUESTY_API_KEY = process.env.REQUESTY_API_KEY;
+const REQUESTY_MODEL_ID = process.env.REQUESTY_MODEL_ID; // e.g., "rag-custom-model-preset"
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 
-  // Attempt to remove common markdown fences for JSON
-  // Regex for ```json ... ``` (handles optional leading/trailing newlines within content)
-  const jsonMdRegex = /^```json\s*([\s\S]*?)\s*```$/m;
-  // Regex for ``` ... ``` (generic code block)
-  const genericMdRegex = /^```\s*([\s\S]*?)\s*```$/m;
+// --- Zod Schemas ---
 
-  let match = potentialJson.match(jsonMdRegex);
-  if (match && match[1]) {
-    potentialJson = match[1];
-  } else {
-    match = potentialJson.match(genericMdRegex);
-    if (match && match[1]) {
-      potentialJson = match[1];
-    }
-  }
-
-  // Trim whitespace from the potentially extracted JSON string
-  potentialJson = potentialJson.trim();
-
-  return potentialJson;
-}
-
-// Helper function to normalize AI response: infer itemRootPath and make mappings relative
-function normalizeAiResponse(rawResponse: any): { itemRootPath?: string; mappings?: any[] } {
-  let itemRootPath: string | undefined;
-  let currentMappings: any[] | undefined;
-
-  if (Array.isArray(rawResponse)) {
-    // AI directly returned an array of mappings
-    currentMappings = rawResponse;
-    itemRootPath = undefined; // Will attempt to infer it later
-    console.log('normalizeAiResponse: AI returned an array of mappings directly.');
-  } else if (typeof rawResponse === 'object' && rawResponse !== null) {
-    // AI returned an object, hopefully with itemRootPath and/or mappings
-    itemRootPath = rawResponse.itemRootPath;
-    currentMappings = rawResponse.mappings;
-    console.log('normalizeAiResponse: AI returned an object, initial itemRootPath:', itemRootPath, 'initial mappings:', currentMappings);
-  } else {
-    // Unexpected format
-    console.error('normalizeAiResponse: Unexpected rawResponse format:', rawResponse);
-    return { itemRootPath: undefined, mappings: [] }; // Return a valid empty structure for schema validation
-  }
-
-  // Ensure currentMappings is an array, even if rawResponse.mappings was undefined or not an array from an object response
-  if (!Array.isArray(currentMappings)) {
-      console.log('normalizeAiResponse: Mappings field is missing or not an array in the AI response. Initializing to empty array.');
-      currentMappings = [];
-  }
-  
-  if (currentMappings.length === 0) {
-    console.log('normalizeAiResponse: Mappings array is empty. Returning structure with potentially original itemRootPath.');
-    return { itemRootPath, mappings: [] };
-  }
-
-  // Attempt to infer itemRootPath if not provided or empty,
-  // and if mappings seem to contain absolute XPaths.
-  if ((!itemRootPath || itemRootPath.trim() === "") && currentMappings.every(m => m.xpath && typeof m.xpath === 'string' && m.xpath.startsWith('/'))) {
-    const xpaths = currentMappings.map(m => m.xpath as string);
-    let longestCommonPrefix = "";
-
-    if (xpaths.length > 0) {
-      const firstPathParts = xpaths[0].substring(1).split('/'); // remove leading / and split
-      for (let i = 0; i < firstPathParts.length; i++) {
-        const currentPrefixCandidate = "/" + firstPathParts.slice(0, i + 1).join('/');
-        // Check if this candidate is a prefix for all paths AND is not an attribute path itself
-        if (!currentPrefixCandidate.includes('/@') && xpaths.every(p => p.startsWith(currentPrefixCandidate + '/') || p === currentPrefixCandidate || p.startsWith(currentPrefixCandidate + '@'))) {
-          longestCommonPrefix = currentPrefixCandidate;
-        } else {
-          break; // Prefix no longer common or suitable
-        }
-      }
-    }
-    if (longestCommonPrefix && longestCommonPrefix.length > 1) { // Avoid just "/"
-      itemRootPath = longestCommonPrefix;
-      console.log(`normalizeAiResponse: Inferred itemRootPath: ${itemRootPath}`);
-    } else {
-      console.log('normalizeAiResponse: Could not infer a suitable itemRootPath from mappings.');
-    }
-  }
-
-  // If we have an itemRootPath (either provided or inferred),
-  // make mapping XPaths relative to it.
-  if (itemRootPath && itemRootPath.trim() !== "" && currentMappings) { // currentMappings is guaranteed to be an array here
-    const rootPathPrefix = itemRootPath.endsWith('/') ? itemRootPath : itemRootPath + '/';
-    const rootPathAttrPrefix = itemRootPath; // For attributes directly on the root item, like /item@id
-
-    const adjustedMappings = currentMappings.map(m => {
-      if (m.xpath && typeof m.xpath === 'string') {
-        if (m.xpath.startsWith(rootPathPrefix)) {
-          let relativePath = m.xpath.substring(rootPathPrefix.length);
-          // Ensure relative path is not empty, if it is, it means it was an exact match to rootPathPrefix (e.g. /products/product/)
-          // which is unusual for a field, but if it happens, perhaps it should be '.' or 'text()'
-          // For now, if it becomes empty, we might default to something or log it.
-          // If the original path was /products/product/ and itemRootPath is /products/product, result is empty.
-          // This usually means the field is the text content of the item root itself.
-          // A common convention for this is '.' or 'text()'. We'll use '.' for simplicity if it becomes empty.
-          return { ...m, xpath: relativePath === "" ? "." : relativePath };
-        }
-        // Handle attributes on the item root path element itself, e.g., itemRootPath = /product, m.xpath = /product@id
-        if (m.xpath.startsWith(rootPathAttrPrefix + '@')) {
-          return { ...m, xpath: m.xpath.substring(rootPathAttrPrefix.length) }; // Results in "@id"
-        }
-      }
-      return m;
-    });
-    console.log('normalizeAiResponse: Mappings after attempting to make them relative:', adjustedMappings);
-    return { itemRootPath, mappings: adjustedMappings };
-  }
-  
-  console.log('normalizeAiResponse: No itemRootPath for adjustment or no adjustments made to mappings, returning current structure.');
-  return { itemRootPath, mappings: currentMappings }; 
-}
-
-// Get models from environment variables for OpenRouter
-function getOpenRouterModels(): {
-  targetModel: string;
-  fallbackModels: string[];
-} {
-  // Default models list as specified in README
-  const DEFAULT_MODELS = [
-    'deepseek/deepseek-chat-v3-0324',
-    'mistralai/mistral-7b-instruct',
-    'google/gemma-7b-it',
-    'openchat/openchat-3.5',
-    'nousresearch/nous-hermes-2-yi-34b'
-  ];
-
-  // Get models from environment variables
-  const envModels = process.env.OPENROUTER_FREE_MODELS 
-    ? process.env.OPENROUTER_FREE_MODELS.split(',').map(m => m.trim())
-    : DEFAULT_MODELS;
-
-  // Get target model (either specified or first in the list)
-  const targetModel = process.env.OPENROUTER_TARGET_MODEL || envModels[0];
-
-  // Create fallback list (all models except the target model)
-  const fallbackModels = envModels.filter(model => model !== targetModel);
-
-  return {
-    targetModel,
-    fallbackModels
-  };
-}
-
-// Determine which API provider to use
-function getApiProvider(clientProvider?: string): 'openrouter' | 'requesty' | null {
-  // If client specified a provider and we have that API key, use it
-  if (clientProvider === 'requesty' && process.env.REQUESTY_API_KEY) {
-    return 'requesty';
-  }
-  
-  if (clientProvider === 'openrouter' && process.env.OPENROUTER_API_KEY) {
-    return 'openrouter';
-  }
-  
-  // Otherwise, fall back to environment-based selection
-  if (process.env.REQUESTY_API_KEY) {
-    return 'requesty';
-  }
-  
-  if (process.env.OPENROUTER_API_KEY) {
-    return 'openrouter';
-  }
-  
-  // If neither is available, return null
-  return null;
-}
-
-// Zod Schema for request validation
-const XmlDetectionRequestSchema = z.object({
-  xmlSample: z.string().min(1, { message: 'XML sample cannot be empty.' }),
-  provider: z.enum(['openrouter', 'requesty']).optional(), // Allow client to specify provider
+// Schema for individual mapping
+const AiMappingSchema = z.object({
+  fieldName: z.string().describe('The conceptual name of the field (e.g., "Product Name", "Price", "Color"). Use the text content of name-like elements if dealing with dynamic attributes.'),
+  xpath: z.string().describe('The XPath expression to extract the field"s value. For dynamic attributes, this XPath should select the value based on its corresponding name (e.g., "attributes/attribute[name=\"Color\"]/value/text()").'),
+  description: z.string().optional().describe('A brief explanation of what this field represents or any special handling notes.'),
+  isDynamicKeyValuePair: z.boolean().optional().default(false).describe('Set to true if this mapping represents one part of a dynamic key-value pair structure that was specifically handled.'),
 });
 
-// Zod Schema for the expected AI response structure
+// New: Schema for how to extract a key in a dynamic block
+const AiDynamicBlockKeySourceSchema = z.object({
+  from: z.enum(['attribute', 'childElementText', 'repeatingElementText']),
+  identifier: z.string().optional().describe("If 'attribute', the name of the attribute (e.g., 'name'). If 'childElementText', the tag name of the child element (e.g., 'key'). Not used if 'repeatingElementText'."),
+});
+
+// New: Schema for how to extract a value in a dynamic block
+const AiDynamicBlockValueSourceSchema = z.object({
+  from: z.enum(['attribute', 'childElementText', 'repeatingElementText', 'text']),
+  identifier: z.string().optional().describe("If 'attribute', the name of the attribute. If 'childElementText', the tag name of the child element. Can be omitted if 'repeatingElementText' or if value is direct text content of repeating element."),
+});
+
+// New: Schema for a detected dynamic block
+const AiDynamicBlockExtractionSchema = z.object({
+  repeatingElementXPath: z.string().describe("The XPath to the repeating elements that form the key-value pairs (e.g., '/product/attributes/attribute' or '/item/features/feature')."),
+  keySource: AiDynamicBlockKeySourceSchema.describe("Describes how to extract the 'key' (field name) from each repeating element."),
+  valueSource: AiDynamicBlockValueSourceSchema.describe("Describes how to extract the 'value' from each repeating element."),
+  exampleMappings: z.array(AiMappingSchema).optional().describe('Up to 3-5 example mappings (fieldName, xpath) derived from this dynamic block structure and the provided XML sample.'),
+});
+
+// Main response schema from the AI
 const AiResponseSchema = z.object({
-  itemRootPath: z.string().optional(),
-  mappings: z.array(
-    z.object({
-      fieldName: z.string().min(1, { message: "Field name cannot be empty." }),
-      xpath: z.string().min(1, { message: "XPath cannot be empty." }),
-    })
-  )
+  itemRootPath: z.string().optional().describe('The common XPath prefix for all items/products in the XML. If not easily identifiable, this can be omitted.'),
+  suggestedMappings: z.array(AiMappingSchema).optional().describe('An array of suggested field mappings for standard, non-dynamic fields. If detectionMode is dynamicBlock, this should contain all fields EXCEPT the ones covered by the dynamicBlockMapping.'),
+  dynamicBlockMapping: AiDynamicBlockExtractionSchema.optional().describe('Describes a single, primary detected dynamic key-value pattern. Only used if detectionMode is dynamicBlock. This should NOT duplicate mappings found in suggestedMappings.'),
+  promptModeUsed: z.enum(['detailedFields', 'dynamicBlock', '']).describe('The mode used for this detection response.'),
+  rawAiResponse: z.string().optional().describe('The raw string response from the AI model, for debugging.'),
+  provider: z.string().optional().describe('The AI provider used (e.g., openrouter.ai, requesty.ai).'),
 });
 
-// System prompt for the AI model
-const SYSTEM_PROMPT = `You are an expert XML and XPath analyst. Your task is to analyze a given XML sample, which represents a single product or item, and identify the most relevant XPaths for extracting key pieces of information. Your XPaths MUST be derived *only* from the elements and attributes present in the provided XML sample. Do not infer or add XPaths for fields not explicitly present.
+// New: Detection mode schema
+const DetectionModeSchema = z.enum(['detailedFields', 'dynamicBlock']).default('detailedFields');
 
-The user will provide an XML snippet. You should return a JSON array of objects, where each object contains:
-1. 'fieldName': A clear, human-readable name for the field (e.g., "Product Title", "Price", "SKU")
-2. 'xpath': The precise XPath expression to extract this field from the XML
+// Updated: Request schema
+const XmlDetectionRequestSchema = z.object({
+  xmlSample: z.string().min(50, { message: 'XML sample must be at least 50 characters long.' })
+    .max(20000, { message: 'XML sample must not exceed 20,000 characters.' }),
+  apiProvider: z.enum([REQUESTY_AI_PROVIDER, OPENROUTER_AI_PROVIDER]).default(OPENROUTER_AI_PROVIDER),
+  detectionMode: DetectionModeSchema,
+  stream: z.boolean().optional().default(false),
+  model: z.string().optional(), // Ensure 'model' is part of the schema
+});
 
-Only use standard XPath 1.0 syntax that would work in XSLT processors. Avoid XPath 2.0/3.0 specific features.
+// --- System Prompts ---
 
-Special Handling for Dynamic Attributes/Key-Value Pairs:
+const SYSTEM_PROMPT_SHARED_HEADER = 'You are an expert XML and XPath analyst. Your task is to analyze a given XML sample that represents a single item or a list of items (e.g., products, articles, records).';
+
+const SYSTEM_PROMPT_SHARED_FOOTER = `
+Provide your response as a VALID JSON object adhering to the specified output schema.
+Focus on extracting meaningful data fields. Avoid generic structural elements unless they clearly represent a data field.
+If the XML contains arrays or repeating elements for a field (e.g., multiple images, categories), provide an XPath that targets all instances (e.g., "/product/images/image/@url" or "/product/categories/category/text()").
+Use relative XPath expressions from the 'itemRootPath' if one is identified and makes sense. If no clear single item root is obvious, use absolute XPaths.
+Ensure all generated XPaths are valid.
+Do not include any explanations or text outside of the JSON structure.
+If you cannot parse the XML or determine mappings, return a JSON with an "error" field explaining the issue.
+`;
+
+const DETAILED_SYSTEM_PROMPT = `
+${SYSTEM_PROMPT_SHARED_HEADER}
+Your goal is to identify key data fields and provide precise XPath expressions to extract their values.
+
+Output Schema (JSON):
+{
+  "itemRootPath": "string (Optional: Common XPath root for a single item, e.g., '/products/product')",
+  "mappings": [
+    {
+      "fieldName": "string (Conceptual name, e.g., 'Product Name', 'Price', 'Color')",
+      "xpath": "string (XPath to extract value, e.g., 'name/text()', '@price', 'attributes/attribute[name="Color"]/value/text()')",
+      "description": "string (Optional: Notes)",
+      "isDynamicKeyValuePair": "boolean (Optional: true if this is part of a handled dynamic key-value pair)"
+    }
+  ],
+  "rawAiResponse": "string (Optional: For debugging, include your original full text response before JSON parsing if possible)"
+}
+
+Key fields to look for (adapt to the XML's content):
+- Unique identifiers (ID, SKU, EAN)
+- Product/Item Name or Title
+- Description
+- Pricing information (price, currency, sale price)
+- Brand or Manufacturer
+- URLs (product page, images)
+- Stock or availability information
+- Category information
+- Any other fields that appear to be significant based on the XML structure
+
+Special Handling for Dynamic Attributes/Key-Value Pairs (Type 1 - Name/Value Sibling Elements):
 Sometimes, field names are not direct XML element names but are contained within the text of an element, often paired with a corresponding value element. This is common for product attributes or specifications.
-For example, you might see a structure like:
+For example:
 <attributes>
   <attribute>
     <name>Color</name>
@@ -216,331 +122,255 @@ For example, you might see a structure like:
     <label>Large</label> <!-- Note: the value element might be named 'value', 'label', or similar -->
   </attribute>
 </attributes>
-In such cases, if you identify a repeating parent element (e.g., 'attribute' in the example) that consistently contains:
+In such cases, if you identify a repeating parent element (e.g., 'attribute') that consistently contains:
   a) one sub-element holding the field's conceptual name (e.g., 'name'), and
   b) another sub-element holding that field's value (e.g., 'value', 'label'),
 you MUST:
 1. Use the text content of the 'name' sub-element (e.g., "Color", "Size") as the 'fieldName' in your JSON output.
 2. Construct an XPath that specifically selects the 'value' or 'label' sub-element based on the text content of its sibling 'name' sub-element.
-   For the "Color" example above, assuming 'itemRootPath' is '/product', a suitable XPath would be: "attributes/attribute[name='Color']/value/text()".
-   For the "Size" example: "attributes/attribute[name='Size']/label/text()".
-Adapt the specific tag names (like 'attributes', 'attribute', 'name', 'value', 'label') to match exactly what you find in the provided XML sample.
-Do NOT generate XPaths for the container attributes like 'id' or 'attributeId' on the repeating parent element (e.g., <attribute id="...">) unless they represent actual data fields themselves. Focus on the conceptual name-value pairs.
+   For "Color" example (itemRootPath '/product'): "attributes/attribute[name="Color"]/value/text()".
+   For "Size" example: "attributes/attribute[name="Size"]/label/text()".
+   Set "isDynamicKeyValuePair" to true for these mappings.
+Adapt tag names ('attributes', 'attribute', 'name', 'value', 'label') to match the XML.
+Do NOT generate XPaths for container attributes like 'id' on the repeating parent element unless they represent actual data fields.
 
-Example response format:
-[
-  {"fieldName": "Product Title", "xpath": "/product/title/text()"},
-  {"fieldName": "Price", "xpath": "/product/price/text()"},
-  {"fieldName": "SKU", "xpath": "/product/@sku"}
-]
+Special Handling for Dynamic Attributes/Key-Value Pairs (Type 2 - Key in Attribute, Value in Text):
+Another pattern is where the key is in an attribute of an element, and the value is the text content of that same element.
+For example:
+<features>
+  <feature name="Material">Cotton</feature>
+  <feature name="Weight">200g</feature>
+</features>
+In such cases:
+1. Use the value of the 'name' attribute (e.g., "Material", "Weight") as the 'fieldName'.
+2. Construct an XPath that selects the text content of the element based on its 'name' attribute.
+   For "Material" example (itemRootPath '/product'): "features/feature[@name='Material']/text()".
+   Set "isDynamicKeyValuePair" to true for these mappings.
+Adapt tag names ('features', 'feature', 'name') to match the XML.
+${SYSTEM_PROMPT_SHARED_FOOTER}
+`;
 
-Focus on finding:
-- Main product identifiers (ID, SKU, etc.)
-- Product name/title
-- Description
-- Price information
-- Image URLs
-- Specifications/attributes
-- Category information
-- Any other fields that appear to be significant based on the XML structure
+const SYSTEM_PROMPT_DYNAMIC_BLOCKS = `
+You are an expert in XML data extraction and XPath generation, tasked with analyzing a sample XML structure to identify field mappings for a data conversion tool. The user wants to detect ONE primary dynamic key-value attribute block and all other standard/static fields.
 
-If the XML contains arrays or repeating elements, provide appropriate XPath queries that target all instances (e.g., "/product/images/image/text()" or "/product/categories/category/@name").
+Your goal is to return a JSON object adhering to the following Zod schema:
 
-Use relative XPath expressions when appropriate, especially for nested structures.`;
-
-export async function POST(request: NextRequest) {
-  try {
-    const { xmlSample, provider } = await request.json();
-    
-    // Validate the request
-    const validatedData = XmlDetectionRequestSchema.safeParse({ xmlSample, provider });
-    if (!validatedData.success) {
-      return NextResponse.json(
-        { error: 'Invalid request data', details: validatedData.error.flatten() },
-        { status: 400 }
-      );
+{
+  "itemRootPath": "string (Required: Full XPath prefix leading to each individual item/product element, e.g., '/catalog/products/product')",
+  "suggestedMappings": [
+    {
+      "fieldName": "string (Conceptual name, e.g., 'Product Name', 'Price', 'Color')",
+      "xpath": "string (XPath to extract value, e.g., 'name/text()', '@price', 'attributes/attribute[name="Color"]/value/text()')",
+      "description": "string (Optional: Notes)",
+      "isDynamicKeyValuePair": "boolean (Optional: true if this is part of a handled dynamic key-value pair)"
     }
-    
-    // Determine which API provider to use (client selection takes precedence)
-    const apiProvider = getApiProvider(provider);
-    
-    // Check if the requested provider is available (has API key)
-    if (provider && apiProvider !== provider) {
-      return NextResponse.json(
-        { error: `The requested provider '${provider}' is not available. API key may be missing.` },
-        { status: 400 }
-      );
-    }
-    
-    if (!apiProvider) {
-      return NextResponse.json(
-        { error: 'No API provider configured. Please set up either OPENROUTER_API_KEY or REQUESTY_API_KEY in your environment.' },
-        { status: 500 }
-      );
-    }
-    
-    // Prepare the system and user prompts
-    const systemPrompt = SYSTEM_PROMPT;
-    const userPrompt = `Analyze this XML sample and provide XPath expressions for the important fields:\n\n${xmlSample}`;
-    
-    // Use the appropriate API provider
-    if (apiProvider === 'openrouter') {
-      return await handleOpenRouterDetection(systemPrompt, userPrompt);
-    } else {
-      return await handleRequestyDetection(systemPrompt, userPrompt);
-    }
-    
-  } catch (error: any) {
-    console.error('Error in AI-based XML detection:', error);
-    return NextResponse.json(
-      { error: 'Failed to detect XML structure using AI', details: (error as Error).message },
-      { status: 500 }
-    );
-  }
+  ],
+  "dynamicBlockMapping": {
+    "repeatingElementXPath": "string (XPath to the repeating elements that form the key-value pairs, e.g., '/product/attributes/attribute' or '/item/features/feature')",
+    "keySource": {
+      "from": "enum ('attribute', 'childElementText', 'repeatingElementText')",
+      "identifier": "string (Optional: If 'attribute', the name of the attribute. If 'childElementText', the tag name of the child element. Not used if 'repeatingElementText'.)"
+    },
+    "valueSource": {
+      "from": "enum ('attribute', 'childElementText', 'repeatingElementText', 'text')",
+      "identifier": "string (Optional: If 'attribute', the name of the attribute. If 'childElementText', the tag name of the child element. Can be omitted if 'repeatingElementText' or if value is direct text content of repeating element.)"
+    },
+    "exampleMappings": [
+      {
+        "fieldName": "string (Actual field name extracted, e.g., 'Color', 'Material')",
+        "xpath": "string (Full XPath to its VALUE, relative to itemRootPath if applicable)",
+        "description": "string (Optional: Notes for this specific example)",
+        "isDynamicKeyValuePair": "boolean (Should be true for these examples)"
+      }
+    ]
+  },
+  "promptModeUsed": "enum ('detailedFields', 'dynamicBlock', '')",
+  "rawAiResponse": "string (Optional: For debugging)"
 }
 
-/**
- * Handle XML structure detection using OpenRouter with fallback mechanism
- */
-async function handleOpenRouterDetection(systemPrompt: string, userPrompt: string): Promise<NextResponse> {
-  // Get the OpenRouter API key
-  const openRouterApiKey = process.env.OPENROUTER_API_KEY;
-  if (!openRouterApiKey) {
-    return NextResponse.json(
-      { error: 'OpenRouter API key is not configured' },
-      { status: 500 }
-    );
-  }
-  
-  // Get the models to try
-  const { targetModel, fallbackModels } = getOpenRouterModels();
-  
-  // Array of all models to try, starting with the target model
-  const modelsToTry = [targetModel, ...fallbackModels];
-  
-  // Try each model in sequence until successful
-  let lastError = null;
-  
-  for (const model of modelsToTry) {
-    try {
-      console.log(`Trying OpenRouter model: ${model}`);
-      
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${openRouterApiKey}`,
-          'HTTP-Referer': 'https://ezconvert.app', // Replace with your actual domain
-          'X-Title': 'EzConvert XML Structure Detection'
-        },
-        body: JSON.stringify({
-          model: model,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt }
-          ],
-          temperature: 0.1, // Low temperature for more deterministic results
-          max_tokens: 4000
-        })
-      });
-      
-      // If rate limited (429) and there are more models to try, continue to the next model
-      if (response.status === 429 && modelsToTry.indexOf(model) < modelsToTry.length - 1) {
-        console.log(`Model ${model} rate limited, trying next model`);
-        const errorData = await response.json();
-        lastError = `${model} rate limited: ${JSON.stringify(errorData)}`;
-        continue;
+Key Instructions for 'dynamicBlock' mode:
+
+1.  **Identify Standard Fields:** Find ALL regular, non-dynamic fields. These can be:
+    *   Direct text content of child elements (e.g., 'name/text()', 'description/text()').
+    *   Attributes of the item element itself (e.g., '@id', '@url').
+    *   Values within specific, non-repeating child structures (e.g., 'images/main_image/@url', 'gallery/image/@source', 'category_path/main_category/text()').
+    For each, create a mapping object and place it in the 'suggestedMappings' array. The 'xpath' should be a standard XPath expression to extract its value. 'isDynamicKeyValuePair' should be false or omitted for these standard fields.
+
+2.  **Identify the Primary Dynamic Key-Value Block:**
+    *   Determine the 'repeatingElementXPath' for the elements that form the dynamic key-value pairs (e.g., '/product/attributes/attribute').
+    *   Define 'keySource': How to get the KEY (field name) of the attribute from each repeating element.
+        *   'from': 'attribute' (key is an XML attribute of the repeating element), 'childElementText' (key is the text of a child element), or 'repeatingElementText'.
+        *   'identifier': If 'from' is 'attribute', this is the attribute's name (e.g., "name", "key"). If 'from' is 'childElementText', this is the tag name of the child element holding the key (e.g., "keyName", "attrName").
+    *   Define 'valueSource': How to get the VALUE of the attribute within each repeating element.
+        *   'from': 'attribute', 'childElementText', 'repeatingElementText', or 'text'.
+        *   'identifier': Similar to 'keySource.identifier', but for the value part.
+    *   'exampleMappings': Provide 2-3 EXAMPLES of concrete mappings that would result from this dynamic pattern (e.g., if key is 'Color' and value is 'Blue', one example would have fieldName: 'Color', xpath: '...predicate for Color...'). For these examples ONLY:
+        *   Set 'isDynamicKeyValuePair' to 'true'.
+        *   These illustrative 'exampleMappings' are part of the 'dynamicBlockMapping' object and MUST NOT be duplicated in the main 'suggestedMappings' array.
+
+3.  **itemRootPath:** Determine the full, common XPath prefix leading to each individual item/product element (e.g., if items are at '/catalog/products/product', then itemRootPath is '/catalog/products/product'). THIS IS REQUIRED OUTPUT.
+
+CRITICAL: The 'suggestedMappings' array MUST ONLY contain mappings for standard, fixed fields that are NOT part of the dynamic block defined in 'dynamicBlockMapping'. The 'dynamicBlockMapping.exampleMappings' array is for illustrating the dynamic pattern itself. DO NOT list the dynamic attributes found by the pattern in 'suggestedMappings'.
+
+Input XML will be provided by the user.
+`;
+
+// --- Main POST Handler ---
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const validationResult = XmlDetectionRequestSchema.safeParse(body);
+
+    if (!validationResult.success) {
+      return NextResponse.json({ error: 'Invalid request body', details: validationResult.error.flatten() }, { status: 400 });
+    }
+
+    const { xmlSample, apiProvider, detectionMode, stream, model: modelIdFromRequest } = validationResult.data;
+    const userMessageContent = `XML Sample:\n---XML START---\n${xmlSample}\n---XML END---\nPlease analyze this XML based on the detection mode: ${detectionMode}.`;
+
+    let systemPrompt = '';
+    if (detectionMode === 'detailedFields') {
+      systemPrompt = DETAILED_SYSTEM_PROMPT;
+    } else if (detectionMode === 'dynamicBlock') {
+      systemPrompt = SYSTEM_PROMPT_DYNAMIC_BLOCKS;
+    } else {
+      return NextResponse.json({ error: 'Invalid detection mode specified.' }, { status: 400 });
+    }
+    
+    const messages: CoreMessage[] = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userMessageContent },
+    ];
+
+    if (apiProvider === OPENROUTER_AI_PROVIDER) {
+      if (!OPENROUTER_API_KEY) {
+        return NextResponse.json({ error: 'OpenRouter API key not configured.' }, { status: 500 });
       }
-      
-      // For other errors, throw an exception
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(`OpenRouter API error with model ${model}: ${JSON.stringify(errorData)}`);
+      const openrouter = createOpenRouter({ apiKey: OPENROUTER_API_KEY });
+      const modelId = modelIdFromRequest || 'openai/gpt-3.5-turbo';
+
+      if (stream) {
+        const streamResult = await streamText({
+          model: openrouter(modelId),
+          messages,
+          onFinish: async ({ text }) => {
+            try {
+              const parsedJson = JSON.parse(text);
+              const finalResponse = { ...parsedJson, promptModeUsed: detectionMode, rawAiResponse: text, provider: OPENROUTER_AI_PROVIDER, model: modelId };
+              // Consider adding validation here if needed for streamed complete responses
+            } catch (e) {
+              console.error('[OpenRouter Streaming] Error parsing AI JSON onFinish:', e);
+            }
+          },
+        });
+        return streamResult.toDataStreamResponse();
+      } else { // Non-streaming OpenRouter
+        const { object, finishReason, usage } = await generateObject({
+            model: openrouter(modelId),
+            messages,
+            schema: AiResponseSchema, 
+        });
+        
+        // 'object' is already the parsed JSON object according to the schema
+        const aiContentObject = object;
+        
+        console.log('OpenRouter - Parsed Object from generateObject:', aiContentObject);
+
+        const finalResponseData = { ...object, promptModeUsed: detectionMode, rawAiResponse: JSON.stringify(object), provider: OPENROUTER_AI_PROVIDER, model: modelId };
+        
+        console.log('--- DEBUG: FINAL RESPONSE TO CLIENT (OpenRouter generateObject) ---');
+        console.log(JSON.stringify(finalResponseData, null, 2));
+        console.log('--- END DEBUG ---');
+
+        const parsedAiResponse = AiResponseSchema.safeParse(finalResponseData);
+
+        if (!parsedAiResponse.success) {
+          console.error('OpenRouter - Zod validation error after generateObject:', parsedAiResponse.error.flatten());
+          return NextResponse.json({ error: 'AI response validation failed', details: parsedAiResponse.error.flatten(), rawResponse: finalResponseData.rawAiResponse }, { status: 500 });
+        }
+        return NextResponse.json(parsedAiResponse.data, { status: 200 });
       }
-      
-      // If we got here, the request was successful
-      const data = await response.json();
-      
-      // Extract the content from the AI response
-      const aiContent = data.choices[0]?.message?.content;
-      if (!aiContent) {
-        throw new Error(`No content in AI response from model ${model}`);
+    } else if (apiProvider === REQUESTY_AI_PROVIDER) {
+      if (!REQUESTY_API_KEY || !REQUESTY_MODEL_ID) {
+        return NextResponse.json({ error: 'Requesty.ai API key or Model ID not configured.' }, { status: 500 });
       }
+
+      const requestyUrl = `https://api.requesty.ai/v1/completions`; 
+      const requestyModelIdToUse = REQUESTY_MODEL_ID; 
+
+      console.log(`Requesty.ai - Using URL: ${requestyUrl}`);
+      console.log(`Requesty.ai - Using Model ID: ${requestyModelIdToUse}`);
       
-      console.log(`Raw AI content from model ${model}:`, aiContent);
-      const jsonContent = extractJsonFromString(aiContent);
-      console.log(`Content after extractJsonFromString for model ${model}:`, jsonContent);
-      let xpathsContent;
+      const messagesForRequesty: CoreMessage[] = [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: `Here is the XML sample to analyze:\n\n${xmlSample}` },
+      ];
+
+      const requestyPayload = {
+        apiKey: REQUESTY_API_KEY, 
+        messages: messagesForRequesty.map(m => ({ role: m.role, content: m.content as string })),
+        model: requestyModelIdToUse,
+        stream: false,
+        format: 'json' 
+      };
 
       try {
-        let parsedJson = JSON.parse(jsonContent);
-        console.log('Parsed AI JSON from OpenRouter:', parsedJson); // Log before normalization
+        const response = await fetch(requestyUrl, {
+          method: 'POST',
+          headers: {
+            
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestyPayload),
+        });
 
-        // Normalize the response
-        xpathsContent = normalizeAiResponse(parsedJson);
-        console.log('Normalized AI JSON from OpenRouter:', xpathsContent); // Log after normalization
+        console.log(`Requesty.ai - Response Status: ${response.status}`);
 
-      } catch (error) {
-        console.error(`Failed to parse JSON from AI response (model ${model}):`, jsonContent);
-        throw new Error(`Invalid JSON in AI response from model ${model}`);
+        if (!response.ok) {
+          const errorBody = await response.text();
+          console.error(`Requesty.ai API Error (${response.status}):`, errorBody);
+          return NextResponse.json({ error: `Requesty.ai API request failed with status ${response.status}`, details: errorBody, provider: REQUESTY_AI_PROVIDER }, { status: response.status });
+        }
+        
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+            const aiResponseJson = await response.json();
+            console.log('Requesty.ai - Raw AI Response JSON:', JSON.stringify(aiResponseJson).substring(0,1000));
+
+            const aiContentString = aiResponseJson.choices?.[0]?.message?.content || aiResponseJson.prediction || JSON.stringify(aiResponseJson);
+            console.log('Requesty.ai - Extracted AI content:', aiContentString.substring(0, 500) + (aiContentString.length > 500 ? '...' : ''));
+
+            let parsedJsonContent;
+            try {
+                parsedJsonContent = JSON.parse(aiContentString);
+            } catch (e) {
+                console.error('[Requesty.ai] Error parsing AI JSON content:', e);
+                console.log('[Requesty.ai] Raw AI content string:', aiContentString);
+                return NextResponse.json({ error: 'Requesty.ai response content is not valid JSON.', details: aiContentString }, { status: 500 });
+            }
+
+            const finalResponseData = { ...parsedJsonContent, promptModeUsed: detectionMode, rawAiResponse: aiContentString, provider: REQUESTY_AI_PROVIDER, model: requestyModelIdToUse };
+            const parsedAiResponse = AiResponseSchema.safeParse(finalResponseData);
+
+            if (!parsedAiResponse.success) {
+                console.error('Requesty.ai - Zod validation error:', parsedAiResponse.error.flatten());
+                return NextResponse.json({ error: 'AI response validation failed for Requesty.ai', details: parsedAiResponse.error.flatten(), rawResponse: aiContentString }, { status: 500 });
+            }
+            return NextResponse.json(parsedAiResponse.data, { status: 200 });
+        } else {
+            const textResponse = await response.text();
+            console.error('Requesty.ai - Unexpected Content-Type:', contentType, textResponse);
+            return NextResponse.json({ error: 'Requesty.ai returned unexpected content type.', details: textResponse }, { status: 500 });
+        }
+      } catch (error: any) {
+        console.error('Error calling Requesty.ai API:', error);
+        return NextResponse.json({ error: 'Failed to call Requesty.ai API.', details: (error as Error).message }, { status: 500 });
       }
-      
-      // Validate the response format
-      const validatedResponse = AiResponseSchema.safeParse(xpathsContent);
-      if (!validatedResponse.success) {
-        console.error(`Response validation failed for model ${model}:`, validatedResponse.error.flatten());
-        throw new Error(`AI response format from model ${model} is invalid`);
-      }
-      
-      // Success! Return the validated XPaths
-      return NextResponse.json({
-        data: validatedResponse.data, // validatedResponse.data is { itemRootPath, mappings }
-        model: `openrouter:${model}`,
-        provider: 'openrouter'
-      });
-      
-    } catch (error: any) {
-      // Store the error to return if all models fail
-      lastError = error.message;
-      console.error(`Error with OpenRouter model ${model}:`, error);
-      
-      // Continue to the next model if there is one
-      continue;
+    } else {
+      return NextResponse.json({ error: 'Invalid API provider.' }, { status: 400 });
     }
-  }
-  
-  // If we get here, all models failed
-  return NextResponse.json(
-    { 
-      error: 'All available OpenRouter models failed to detect XML structure', 
-      details: lastError || 'Unknown error',
-      provider: 'openrouter'
-    },
-    { status: 500 }
-  );
-}
-
-/**
- * Handle XML structure detection using Requesty.ai
- * Requesty.ai handles the fallback chain through their web configuration
- */
-async function handleRequestyDetection(systemPrompt: string, userPrompt: string): Promise<NextResponse> {
-  // Get the Requesty API key
-  const requestyApiKey = process.env.REQUESTY_API_KEY;
-  const requestyDefaultModel = process.env.REQUESTY_DEFAULT_MODEL; // Get the default model
-
-  if (!requestyApiKey) {
-    return NextResponse.json(
-      { error: 'Requesty API key is not configured' },
-      { status: 500 }
-    );
-  }
-
-  if (!requestyDefaultModel) { // Check if the default model is configured
-    return NextResponse.json(
-      { error: 'Requesty default model is not configured' },
-      { status: 500 }
-    );
-  }
-  
-  try {
-    console.log('Using Requesty.ai for XML detection with model:', requestyDefaultModel);
-    
-    const response = await fetch('https://router.requesty.ai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${requestyApiKey}`,
-        'X-Title': 'EzConvert XML Structure Detection'
-      },
-      body: JSON.stringify({
-        model: requestyDefaultModel, // Add the model to the request body
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        temperature: 0.1,
-        max_tokens: 4000
-      })
-    });
-    
-    if (!response.ok) {
-      const contentType = response.headers.get('content-type');
-      let errorDetailsText;
-      if (contentType && contentType.includes('application/json')) {
-        const errorData = await response.json();
-        errorDetailsText = JSON.stringify(errorData);
-      } else {
-        errorDetailsText = await response.text(); // Get HTML/text error
-        console.error(
-          'Requesty API returned non-JSON error response:', 
-          errorDetailsText
-        );
-      }
-      throw new Error(`Requesty API error (status ${response.status}): ${errorDetailsText}`);
-    }
-    
-    // If response.ok is true, still check content type before parsing
-    const contentType = response.headers.get('content-type');
-    if (!contentType || !contentType.includes('application/json')) {
-        const responseText = await response.text();
-        console.error(
-            `Requesty API response was not JSON (Content-Type: ${contentType}). Response text:`,
-            responseText
-        );
-        throw new Error(
-            `Requesty API did not return JSON. Received (first 100 chars): ${responseText.substring(0,100)}...`
-        );
-    }
-
-    const data = await response.json(); // Now safer to call .json()
-    
-    // Extract the content from the AI response
-    const aiContent = data.choices[0]?.message?.content;
-    if (!aiContent) {
-      throw new Error('No content in Requesty AI response');
-    }
-    
-    // Extract JSON from the AI response
-    const jsonContent = extractJsonFromString(aiContent);
-    let xpathsContent;
-    
-    try {
-      let parsedJson = JSON.parse(jsonContent);
-      console.log('Parsed AI JSON from Requesty:', parsedJson); // Log before normalization
-
-      // Normalize the response
-      xpathsContent = normalizeAiResponse(parsedJson);
-      console.log('Normalized AI JSON from Requesty:', xpathsContent); // Log after normalization
-
-    } catch (error) {
-      console.error('Failed to parse JSON from Requesty AI response:', jsonContent);
-      throw new Error('Invalid JSON in Requesty AI response');
-    }
-    
-    // Validate the response format
-    const validatedResponse = AiResponseSchema.safeParse(xpathsContent);
-    if (!validatedResponse.success) {
-      console.error('Response validation failed for Requesty:', validatedResponse.error.flatten());
-      throw new Error('Requesty AI response format is invalid');
-    }
-    
-    // Success! Return the validated XPaths
-    return NextResponse.json({
-      data: validatedResponse.data, // validatedResponse.data is { itemRootPath, mappings }
-      model: 'requesty-default',
-      provider: 'requesty'
-    });
-    
   } catch (error: any) {
-    console.error('Error with Requesty AI detection:', error);
-    return NextResponse.json(
-      { 
-        error: 'Requesty AI failed to detect XML structure', 
-        details: error.message,
-        provider: 'requesty'
-      },
-      { status: 500 }
-    );
+    console.error('Error in /api/detect-xml-structure:', error);
+    return NextResponse.json({ error: 'Internal server error.', details: error.message }, { status: 500 });
   }
 }

@@ -1,0 +1,132 @@
+OpenRouter - Parsed Object from generateObject: {
+  itemRootPath: '/offers/group/o',
+  suggestedMappings: [
+    {
+      fieldName: 'ID',
+      xpath: '@id',
+      description: 'Unique identifier for the product',
+      isDynamicKeyValuePair: false
+    },
+    {
+      fieldName: 'URL',
+      xpath: '@url',
+      description: 'URL of the product page',
+      isDynamicKeyValuePair: false
+    },
+    {
+      fieldName: 'Price',
+      xpath: '@price',
+      description: 'Price of the product',
+      isDynamicKeyValuePair: false
+    },
+    {
+      fieldName: 'Stock',
+      xpath: '@stock',
+      description: 'Available stock quantity',
+      isDynamicKeyValuePair: false
+    },
+    {
+      fieldName: 'Availability',
+      xpath: '@avail',
+      description: 'Availability percentage',
+      isDynamicKeyValuePair: false
+    }
+  ],
+  dynamicBlockMapping: {
+    repeatingElementXPath: 'attrs/a',
+    keySource: { from: 'attribute', identifier: 'name' },
+    valueSource: { from: 'text' },
+    exampleMappings: [ [Object], [Object], [Object], [Object], [Object], [Object] ]
+  },
+  promptModeUsed: 'dynamicBlock'
+}
+--- DEBUG: FINAL RESPONSE TO CLIENT (OpenRouter generateObject) ---
+{
+  "itemRootPath": "/offers/group/o",
+  "suggestedMappings": [
+    {
+      "fieldName": "ID",
+      "xpath": "@id",
+      "description": "Unique identifier for the product",
+      "isDynamicKeyValuePair": false
+    },
+    {
+      "fieldName": "URL",
+      "xpath": "@url",
+      "description": "URL of the product page",
+      "isDynamicKeyValuePair": false
+    },
+    {
+      "fieldName": "Price",
+      "xpath": "@price",
+      "description": "Price of the product",
+      "isDynamicKeyValuePair": false
+    },
+    {
+      "fieldName": "Stock",
+      "xpath": "@stock",
+      "description": "Available stock quantity",
+      "isDynamicKeyValuePair": false
+    },
+    {
+      "fieldName": "Availability",
+      "xpath": "@avail",
+      "description": "Availability percentage",
+      "isDynamicKeyValuePair": false
+    }
+  ],
+  "dynamicBlockMapping": {
+    "repeatingElementXPath": "attrs/a",
+    "keySource": {
+      "from": "attribute",
+      "identifier": "name"
+    },
+    "valueSource": {
+      "from": "text"
+    },
+    "exampleMappings": [
+      {
+        "fieldName": "Akumulator",
+        "xpath": "attrs/a[@name='Akumulator']",
+        "description": "Battery capacity in mAh",
+        "isDynamicKeyValuePair": false
+      },
+      {
+        "fieldName": "Barwa światła",
+        "xpath": "attrs/a[@name='Barwa światła']",
+        "description": "Light color",
+        "isDynamicKeyValuePair": false
+      },
+      {
+        "fieldName": "Czas ładowania",
+        "xpath": "attrs/a[@name='Czas ładowania']",
+        "description": "Charging time",
+        "isDynamicKeyValuePair": false
+      },
+      {
+        "fieldName": "Czas pracy",
+        "xpath": "attrs/a[@name='Czas pracy']",
+        "description": "Operating time",
+        "isDynamicKeyValuePair": false
+      },
+      {
+        "fieldName": "Długość",
+        "xpath": "attrs/a[@name='Długość']",
+        "description": "Length",
+        "isDynamicKeyValuePair": false
+      },
+      {
+        "fieldName": "Gwarancja",
+        "xpath": "attrs/a[@name='Gwarancja']",
+        "description": "Warranty period",
+        "isDynamicKeyValuePair": false
+      }
+    ]
+  },
+  "promptModeUsed": "dynamicBlock",
+  "rawAiResponse": "{\"itemRootPath\":\"/offers/group/o\",\"suggestedMappings\":[{\"fieldName\":\"ID\",\"xpath\":\"@id\",\"description\":\"Unique identifier for the product\",\"isDynamicKeyValuePair\":false},{\"fieldName\":\"URL\",\"xpath\":\"@url\",\"description\":\"URL of the product page\",\"isDynamicKeyValuePair\":false},{\"fieldName\":\"Price\",\"xpath\":\"@price\",\"description\":\"Price of the product\",\"isDynamicKeyValuePair\":false},{\"fieldName\":\"Stock\",\"xpath\":\"@stock\",\"description\":\"Available stock quantity\",\"isDynamicKeyValuePair\":false},{\"fieldName\":\"Availability\",\"xpath\":\"@avail\",\"description\":\"Availability percentage\",\"isDynamicKeyValuePair\":false}],\"dynamicBlockMapping\":{\"repeatingElementXPath\":\"attrs/a\",\"keySource\":{\"from\":\"attribute\",\"identifier\":\"name\"},\"valueSource\":{\"from\":\"text\"},\"exampleMappings\":[{\"fieldName\":\"Akumulator\",\"xpath\":\"attrs/a[@name='Akumulator']\",\"description\":\"Battery capacity in mAh\",\"isDynamicKeyValuePair\":false},{\"fieldName\":\"Barwa światła\",\"xpath\":\"attrs/a[@name='Barwa światła']\",\"description\":\"Light color\",\"isDynamicKeyValuePair\":false},{\"fieldName\":\"Czas ładowania\",\"xpath\":\"attrs/a[@name='Czas ładowania']\",\"description\":\"Charging time\",\"isDynamicKeyValuePair\":false},{\"fieldName\":\"Czas pracy\",\"xpath\":\"attrs/a[@name='Czas pracy']\",\"description\":\"Operating time\",\"isDynamicKeyValuePair\":false},{\"fieldName\":\"Długość\",\"xpath\":\"attrs/a[@name='Długość']\",\"description\":\"Length\",\"isDynamicKeyValuePair\":false},{\"fieldName\":\"Gwarancja\",\"xpath\":\"attrs/a[@name='Gwarancja']\",\"description\":\"Warranty period\",\"isDynamicKeyValuePair\":false}]},\"promptModeUsed\":\"dynamicBlock\"}",
+  "provider": "openrouter.ai",
+  "model": "openai/gpt-3.5-turbo"
+}
+--- END DEBUG ---
+ POST /api/detect-xml-structure 200 in 3430ms

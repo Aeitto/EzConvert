@@ -10,9 +10,27 @@
 			<name><![CDATA[MARY'S LAMPKA NOCNA LED GRUSZKA ZIELONA]]></name>
 			<desc><![CDATA[Lampka Nocna LED Gruszka Zielona – Mary's
 Zmieniaj atmosferę w swoim wnętrzu z wyjątkową lampką nocną LED w kształcie zielonej gruszki! Idealna do pokoju dziecięcego, sypialni, lub jako subtelne źródło światła w salonie. Dzięki swoim funkcjonalnym właściwościom i uroczemu wyglądowi, lampka wprowadza ciepło i spokój do każdej przestrzeni.
+Specyfikacja:
+Rodzaj: Lampka nocna LED
+Czas ładowania: 4 godziny
+Czas pracy: 6 – 30 godzin (w zależności od ustawionego trybu)
+Barwa światła: Ciepła, relaksująca
+Materiał: ABS + PC + Silikon – bezpieczne, trwałe materiały
+Wymiary: 117 x 114 x 130 mm – kompaktowa i poręczna
+W zestawie: Kabel USB-C do wygodnego ładowania
+Pakowanie: 60 sztuk w kartonie zbiorczym
+Zalety:
+Doskonała do tworzenia przytulnej atmosfery w nocy.
+Ekologiczna i energooszczędna – długi czas pracy na jednym ładowaniu.
+Łatwe ładowanie za pomocą kabla USB-C.
+Ciepła barwa światła idealna do relaksu i odpoczynku.
+Zachwyć się naturalnym urokiem zielonej gruszki – lampka, która oświetli Twoje noce.
 ]]></desc>
 			<cat><![CDATA[Pozostałe oświetlenie]]></cat>
 			<imgs>
+            <!-- current dynamic block detection ignores imgs completly
+			# it should suggest xpaths: imgs/main/@url
+			# and imgs/i/@url -->
 				<main url="https://cennik.ecolight.pl/wp-content/uploads/mary-s-lampka-nocna-led-gruszka-zielona-5c2d720c4087440aac7765430323ee25-a41f0f08-2.jpg"/>
 				<i url="https://cennik.ecolight.pl/wp-content/uploads/mary-s-lampka-nocna-led-gruszka-zielona-8b22b0847e8749fd826309b4fb5262bb-530a5f65.jpg"/>
 				<i url="https://cennik.ecolight.pl/wp-content/uploads/mary-s-lampka-nocna-led-gruszka-zielona-bef9a77f1e9d4f19a0793b7576b537e9-530a5f65.jpg"/>
@@ -20,10 +38,6 @@ Zmieniaj atmosferę w swoim wnętrzu z wyjątkową lampką nocną LED w kształc
 				<i url="https://cennik.ecolight.pl/wp-content/uploads/mary-s-lampka-nocna-led-gruszka-zielona-dbe57632b4f54e5cacaf2c88cde3d738-240d6ff3.jpg"/>
 			</imgs>
 			<attrs>
-            # Here we se a lot of nested attributes.
-            # Maybe instead of creating individual mapping for each like: attrs/a[@name='Akumulator']/text()
-            # We could create a mapping for the whole attrs element and then use a regex to extract the values.
-            # So the xpath would be: attrs/a and use checkox "Map as dynamic Attributes"
 				<a name="Akumulator"><![CDATA[1200mAh]]></a>
 				<a name="Barwa światła"><![CDATA[Ciepła]]></a>
 				<a name="Czas ładowania"><![CDATA[4h]]></a>

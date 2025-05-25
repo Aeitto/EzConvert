@@ -10,6 +10,7 @@
 !.yarn/releases
 !.yarn/versions
 
+
 #local files
 .env.local
 .raw_ai_response.txt

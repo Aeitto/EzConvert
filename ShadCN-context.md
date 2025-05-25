@@ -46,6 +46,9 @@ This file tracks the ShadCN components used throughout the EzConvert application
 - **Textarea**: Used for multi-line value mappings
 - **Label**: Used for form labels
 - **Switch**: Used for Boolean toggle controls
+- **Checkbox**: Used for selection options (e.g., in modals or forms)
+- **RadioGroup**: Used for selecting one option from a set (e.g., API provider, detection mode in XML AI Modal)
+  - **RadioGroupItem**: Individual items within a RadioGroup
 
 ## Implemented Tools
 
