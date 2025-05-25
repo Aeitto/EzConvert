@@ -1,0 +1,69 @@
+<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+    <products elments="636" clientid="6948" lang="pl" datetime="12.03.2025 14:54:22" template="1" version="3">
+
+            <product addedDate="14.06.2023 10:14:10" lastUpdate="14.06.2023 10:14:10">
+                <ean><![CDATA[5904798616373]]></ean>
+                <id>6249</id>
+                <sku><![CDATA[397D1]]></sku>
+                <name><![CDATA[KINKIET RÓŻA 2 BLACK]]></name>
+                <desc><![CDATA[]]></desc>
+                <url><![CDATA[https://b2b.aldex.com.pl/kinkiet-roza-2-black?modal=true]]></url>
+                <categories>
+                            <category id="110317"><![CDATA[LAMPY AKTYWNE]]></category>
+
+                </categories>
+                <attributes>
+
+                            <attribute id="4669047016774458386" attributeId="108">
+                                <name><![CDATA[waga lampy]]></name>
+                                <label><![CDATA[0.91]]></label>
+                            </attribute>
+                            <attribute id="8646860419140350789" attributeId="85">
+                                <name><![CDATA[max. Wattage]]></name>
+                                <label><![CDATA[2 x max 10W led]]></label>
+                            </attribute>
+                            <attribute id="8204521100633240504" attributeId="88">
+                                <name><![CDATA[głębokość lampy]]></name>
+                                <label><![CDATA[30]]></label>
+                            </attribute>
+                            <attribute id="5100098576130854014" attributeId="87">
+                                <name><![CDATA[wysokość lampy]]></name>
+                                <label><![CDATA[33]]></label>
+                            </attribute>
+                            <attribute id="4872796916926301968" attributeId="86">
+                                <name><![CDATA[szerokość lampy]]></name>
+                                <label><![CDATA[35]]></label>
+                            </attribute>
+                            <attribute id="4288050356990336065" attributeId="113">
+                                <name><![CDATA[KOLOR]]></name>
+                                <label><![CDATA[BLACK]]></label>
+                            </attribute>
+                            <attribute id="934117246034146781" attributeId="83">
+                                <name><![CDATA[WYKOŃCZENIE]]></name>
+                                <label><![CDATA[metal]]></label>
+                            </attribute>
+                            <attribute id="8151029871653463804" attributeId="89">
+                                <name><![CDATA[średnica klosza]]></name>
+                                <label><![CDATA[N/A]]></label>
+                            </attribute>
+                            <attribute id="7369952923064067495" attributeId="102">
+                                <name><![CDATA[wysokość elementu stałego]]></name>
+                                <label><![CDATA[N/A]]></label>
+                            </attribute>
+                </attributes>
+                <unit><![CDATA[SZT]]></unit>
+                <weight></weight>
+                <PKWiU>27.40.25-00</PKWiU>
+                    <inStock>True</inStock>
+                    <qty>1</qty>
+                    <availability></availability>
+                <requiredBox>False</requiredBox>
+                <quantityPerBox>1</quantityPerBox>
+                    <priceAfterDiscountNet>119,84</priceAfterDiscountNet>
+                    <vat>23</vat>
+                                    <retailPriceGross>220</retailPriceGross>
+                <photos>
+                            <photo id="190" main="1"><![CDATA[https://b2b.aldex.com.pl/zasoby/import/6/6249_1_148.jpg]]></photo>
+                </photos>
+            </product>
+    </products>

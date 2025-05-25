@@ -1,4 +1,3 @@
-
 "use client";
 import { useState, useEffect, type FormEvent, useId } from 'react';
 import { useEzConvert } from '@/contexts/EzConvertContext';
@@ -7,10 +6,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import type { XmlProfile, XmlProfileFieldMapping } from '@/types/ezconvert';
-import { PlusCircle, Trash2, Save } from 'lucide-react';
+import { PlusCircle, Trash2, Save, Sparkles } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
-import { Checkbox } from '@/components/ui/checkbox'; // Import Checkbox
+import { Checkbox } from '@/components/ui/checkbox';
+import { XmlAiDetectionModal } from './XmlAiDetectionModal';
 
 interface ProfileFormModalProps {
   isOpen: boolean;
@@ -32,7 +32,8 @@ export function ProfileFormModal({ isOpen, onClose, profile }: ProfileFormModalP
     { ...initialFieldMapping, id: crypto.randomUUID(), header: suggestedColumnHeaders[0] || 'Header1' }
   ]);
   const { toast } = useToast();
-  const baseFormId = useId(); // Use useId for unique form ID
+  const baseFormId = useId();
+  const [isAiDetectionModalOpen, setIsAiDetectionModalOpen] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -45,17 +46,24 @@ export function ProfileFormModal({ isOpen, onClose, profile }: ProfileFormModalP
               id: fm.id || crypto.randomUUID(),
               isDynamicAttributeMapping: fm.isDynamicAttributeMapping || false,
             })) 
-          : [{ ...initialFieldMapping, id: crypto.randomUUID(), header: suggestedColumnHeaders[0] || 'Header1' }]);
+          : [{ ...initialFieldMapping, id: crypto.randomUUID(), header: suggestedColumnHeaders[0] || 'Header1' }]
+        );
       } else {
         setName('');
         setItemRootPath('');
         setFieldMappings([{ ...initialFieldMapping, id: crypto.randomUUID(), header: suggestedColumnHeaders[0] || 'Header1' }]);
       }
+      setIsAiDetectionModalOpen(false);
+    } else {
+      // Optionally reset when modal is fully closed, not just hidden
+      // setName('');
+      // setItemRootPath('');
+      // setFieldMappings([{ ...initialFieldMapping, id: crypto.randomUUID(), header: suggestedColumnHeaders[0] || 'Header1' }]);
+      // setIsAiDetectionModalOpen(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile, isOpen, suggestedColumnHeaders]); // Added suggestedColumnHeaders to dependencies
+  }, [isOpen, profile, suggestedColumnHeaders]);
 
-  const handleMappingChange = (index: number, field: keyof XmlProfileFieldMapping, value: string | boolean) => {
+  const handleMappingChange = (index: number, field: keyof XmlProfileFieldMapping, value: any) => {
     setFieldMappings(currentMappings =>
       currentMappings.map((mapping, i) =>
         i === index ? { ...mapping, [field]: value } : mapping
@@ -149,7 +157,7 @@ export function ProfileFormModal({ isOpen, onClose, profile }: ProfileFormModalP
           <DialogTitle>{profile ? 'Edit' : 'Create'} XML Profile</DialogTitle>
         </DialogHeader>
         
-        <form id={baseFormId} onSubmit={handleSubmit} className="flex flex-col flex-grow min-h-0 overflow-y-auto px-6 space-y-4"> {/* Added overflow-y-auto */}
+        <form id={baseFormId} onSubmit={handleSubmit} className="flex flex-col flex-grow min-h-0 overflow-y-auto px-6 space-y-4">
           <div className="space-y-1 flex-shrink-0">
             <Label htmlFor={`${baseFormId}-profile-name`}>Profile Name</Label>
             <Input id={`${baseFormId}-profile-name`} value={name} onChange={(e) => setName(e.target.value)} required />
@@ -168,20 +176,19 @@ export function ProfileFormModal({ isOpen, onClose, profile }: ProfileFormModalP
           </div>
 
           {/* Field Mappings Section */}
-          <div className="space-y-2 flex flex-col flex-grow min-h-0">
-            <div>
-              <Label htmlFor={`${baseFormId}-field-mappings-scroll-area`}>Field Mappings</Label>
-              <p className="text-xs text-muted-foreground">
-                Map XML tags/paths/attributes to desired column headers.
-                For dynamic attributes (e.g. from &lt;a name="Attr"&gt;Value&lt;/a&gt;), check "Dynamic" and set Source Path to point to the 'a' tags (e.g. 'attrs/a').
-                The 'Header' field can be an optional prefix for dynamic headers.
-              </p>
+          <div className="space-y-3">
+            <div className="flex justify-between items-center">
+              <Label className="text-base font-medium">Field Mappings</Label>
+              <Button 
+                type="button" 
+                variant="outline"
+                size="sm"
+                onClick={() => setIsAiDetectionModalOpen(true)}
+              >
+                <Sparkles size={16} className="mr-2" /> Detect with AI
+              </Button>
             </div>
-            
-            <ScrollArea
-              id={`${baseFormId}-field-mappings-scroll-area`}
-              className="rounded-md border p-3 h-[180px] " 
-            >
+            <ScrollArea className="h-[250px] border rounded-md p-4 bg-muted/30">
               <div className="space-y-4">
                 {fieldMappings.map((mapping, index) => (
                   <div key={mapping.id || index} className="space-y-2 p-2 border-b last:border-b-0">
@@ -236,7 +243,7 @@ export function ProfileFormModal({ isOpen, onClose, profile }: ProfileFormModalP
           </div>
         </form>
         
-        <DialogFooter className="p-6 pt-4 border-t flex-shrink-0"> {/* Removed mt-auto */}
+        <DialogFooter className="p-6 pt-4 border-t flex-shrink-0">
           <DialogClose asChild>
             <Button type="button" variant="outline">Cancel</Button>
           </DialogClose>
@@ -245,6 +252,20 @@ export function ProfileFormModal({ isOpen, onClose, profile }: ProfileFormModalP
           </Button>
         </DialogFooter>
       </DialogContent>
+      {/* AI Detection Modal Render */}
+      <XmlAiDetectionModal 
+        isOpen={isAiDetectionModalOpen}
+        onClose={() => setIsAiDetectionModalOpen(false)}
+        onDetectionComplete={(detectedRoot, detectedFields) => {
+          setItemRootPath(detectedRoot || '/'); // Use detected root or a default
+          setFieldMappings(detectedFields);
+          setIsAiDetectionModalOpen(false);
+          toast({
+            title: "AI Detection Applied",
+            description: `Populated ${detectedFields.length} field mappings. Review and save.`
+          });
+        }}
+      />
     </Dialog>
   );
 }

@@ -77,7 +77,7 @@ export function parseXml(xmlText: string, itemRootPath: string, fieldMappings: X
   let itemNodesArray: Element[] = [];
 
   try {
-    // Use document.evaluate for more complex/standard XPath for itemRootPath
+    console.log(`Evaluating item root path: ${itemRootPath}`);
     const result = xmlDoc.evaluate(itemRootPath, xmlDoc.documentElement, null, XPathResult.ORDERED_NODE_ITERATOR_TYPE, null);
     let node = result.iterateNext();
     while (node) {
@@ -88,76 +88,41 @@ export function parseXml(xmlText: string, itemRootPath: string, fieldMappings: X
     }
 
     if (itemNodesArray.length === 0) {
-        console.log(`XML parsing: No item nodes found for itemRootPath '${itemRootPath}'. Check your XML structure and path.`);
+      console.log(`XML parsing: No item nodes found for itemRootPath '${itemRootPath}'. Check your XML structure and path.`);
+      
+      // Fallback: try a simpler approach if the XPath is too complex
+      const tagName = itemRootPath.replace(/^\/*/, '').split('/')[0];
+      if (tagName) {
+        const elements = xmlDoc.getElementsByTagName(tagName);
+        console.log(`Fallback: Found ${elements.length} elements with tag name '${tagName}'`);
+        for (let i = 0; i < elements.length; i++) {
+          itemNodesArray.push(elements[i]);
+        }
+      }
     }
 
-    itemNodesArray.forEach((itemNode) => {
+    console.log(`Found ${itemNodesArray.length} item nodes`);
+
+    itemNodesArray.forEach((itemNode, itemIndex) => {
       const row: ProcessedRow = {};
+      
       fieldMappings.forEach(mapping => {
         try {
-            if (mapping.isDynamicAttributeMapping) {
-                // mapping.sourcePath (e.g., 'attrs/a') points to the elements containing name and value.
-                const attributeHolderNodes = evaluateXPathToElements(itemNode, mapping.sourcePath, xmlDoc);
-                attributeHolderNodes.forEach(holderNode => {
-                    const attrKey = holderNode.getAttribute('name');
-                    const attrValueNode = holderNode.firstChild; // Assuming CDATA or text is the first child
-                    let attrValue = '';
-                    if (attrValueNode && (attrValueNode.nodeType === Node.TEXT_NODE || attrValueNode.nodeType === Node.CDATA_SECTION_NODE)) {
-                         attrValue = attrValueNode.textContent || '';
-                    } else if (holderNode.textContent){ // Fallback to textContent if no direct CDATA/text child
-                        attrValue = holderNode.textContent;
-                    }
-
-                    if (attrKey) { // Only add if key is present
-                        const finalHeader = mapping.header ? `${mapping.header}${attrKey}` : attrKey;
-                        row[finalHeader] = attrValue.trim();
-                    }
-                });
-
-            } else { // Regular mapping
-                let value: string | null = null;
-                const pathSegments = mapping.sourcePath.split('/');
-                let currentContextNode: Node | Element = itemNode;
-                let resolvedNodes: Element[] = [];
-
-                if (mapping.sourcePath.startsWith('@')) { // Attribute on the itemNode itself
-                    value = (itemNode as Element).getAttribute(mapping.sourcePath.substring(1));
-                } else if (!mapping.sourcePath.includes('/') && mapping.sourcePath.includes('@')) { // like "tag@attr" on itemNode
-                    const [tagName, attrName] = mapping.sourcePath.split('@');
-                     const directChildren = Array.from((itemNode as Element).children).filter(child => child.tagName.toLowerCase() === tagName.toLowerCase());
-                     if (directChildren.length > 0) {
-                        value = directChildren[0].getAttribute(attrName);
-                     }
-                }
-                else {
-                    resolvedNodes = evaluateXPathToElements(itemNode, mapping.sourcePath, xmlDoc);
-                    if (resolvedNodes.length > 0) {
-                        // Check if the last part of the sourcePath is an attribute
-                        const lastSegment = pathSegments[pathSegments.length - 1];
-                        if (lastSegment.startsWith('@')) {
-                            const attrName = lastSegment.substring(1);
-                            // If mapping.sourcePath was "parent/child@attr", resolvedNodes would be the <child> elements
-                            value = resolvedNodes.map(n => n.getAttribute(attrName)).filter(v => v !== null).join('\n');
-                        } else {
-                             value = resolvedNodes.map(n => {
-                                // Prefer CDATA if present
-                                if (n.childNodes.length === 1 && n.childNodes[0].nodeType === Node.CDATA_SECTION_NODE) {
-                                    return n.childNodes[0].textContent;
-                                }
-                                return n.textContent;
-                            }).join('\n');
-                        }
-                    }
-                }
-                row[mapping.header] = value !== null ? value.trim() : '';
-            }
-        } catch (e:any) {
-             console.error(`Error processing mapping for sourcePath "${mapping.sourcePath}" and header "${mapping.header}":`, e.message);
-             if(!mapping.isDynamicAttributeMapping) {
-                row[mapping.header] = ''; // Ensure header exists even if mapping fails
-             }
+          if (mapping.isDynamicAttributeMapping) {
+            // Handle dynamic attribute mapping
+            processDynamicAttributeMapping(itemNode, mapping, row, xmlDoc);
+          } else {
+            // Handle regular field mapping
+            processFieldMapping(itemNode, mapping, row, xmlDoc);
+          }
+        } catch (e: any) {
+          console.error(`Error processing mapping for sourcePath "${mapping.sourcePath}" and header "${mapping.header}":`, e.message);
+          if (!mapping.isDynamicAttributeMapping) {
+            row[mapping.header] = ''; // Ensure header exists even if mapping fails
+          }
         }
       });
+      
       items.push(row);
     });
   } catch (e: any) {
@@ -166,11 +131,173 @@ export function parseXml(xmlText: string, itemRootPath: string, fieldMappings: X
   }
 
   if (items.length === 0 && itemNodesArray.length > 0) {
-      console.log("XML parsing found item nodes, but no data was extracted into rows. Check fieldMappings sourcePaths relative to item nodes.", {itemRootPath, fieldMappingsCount: fieldMappings.length});
+    console.log("XML parsing found item nodes, but no data was extracted into rows. Check fieldMappings sourcePaths relative to item nodes.", {itemRootPath, fieldMappingsCount: fieldMappings.length});
   }
+  
   return items;
 }
 
+/**
+ * Process a dynamic attribute mapping where the mapping points to elements containing name/value pairs
+ */
+function processDynamicAttributeMapping(itemNode: Element, mapping: XmlProfileFieldMapping, row: ProcessedRow, xmlDoc: XMLDocument): void {
+  // mapping.sourcePath (e.g., 'attributes/*') points to the elements containing name and value
+  const attributeHolderNodes = evaluateXPathToElements(itemNode, mapping.sourcePath, xmlDoc);
+  
+  attributeHolderNodes.forEach(attrNode => {
+    // For dynamic attribute mapping, we need to extract name and value from each node
+    const nameNode = attrNode.querySelector('name');
+    const valueNode = attrNode.querySelector('value') || attrNode.querySelector('label');
+    
+    if (nameNode && valueNode) {
+      const attrName = extractTextContent(nameNode);
+      const attrValue = extractTextContent(valueNode);
+      
+      if (attrName) {
+        // Use the attribute name as the header
+        row[attrName] = attrValue || '';
+      }
+    }
+  });
+}
+
+/**
+ * Process a regular field mapping where the mapping points to a specific element or attribute
+ */
+function processFieldMapping(itemNode: Element, mapping: XmlProfileFieldMapping, row: ProcessedRow, xmlDoc: XMLDocument): void {
+  const sourcePath = mapping.sourcePath;
+  console.log(`Processing field mapping: ${mapping.header} with path ${sourcePath}`);
+  
+  // Handle text() function in XPath
+  if (sourcePath.endsWith('/text()')) {
+    // Extract the path without the text() function
+    const elementPath = sourcePath.substring(0, sourcePath.length - 7);
+    const result = evaluateXPath(itemNode, elementPath, xmlDoc, XPathResult.FIRST_ORDERED_NODE_TYPE);
+    
+    if (result && result.singleNodeValue) {
+      const node = result.singleNodeValue as Element;
+      row[mapping.header] = extractTextContent(node);
+      return;
+    }
+  }
+  
+  // Handle attribute selection with predicates like: attribute[name/text()='value']
+  if (sourcePath.includes('[') && sourcePath.includes(']') && sourcePath.includes('/text()=')) {
+    const pathParts = sourcePath.split('[');
+    const basePath = pathParts[0];
+    const predicate = pathParts[1].split(']')[0];
+    
+    // Extract the field name and value from the predicate
+    const predicateParts = predicate.split('/text()=');
+    const fieldName = predicateParts[0];
+    const fieldValue = predicateParts[1].replace(/^'|'$/g, ''); // Remove quotes
+    
+    // Find all elements matching the base path
+    const elements = evaluateXPathToElements(itemNode, basePath, xmlDoc);
+    
+    for (const element of elements) {
+      // Find the field element within this element
+      const fieldElement = element.querySelector(fieldName);
+      
+      if (fieldElement && extractTextContent(fieldElement) === fieldValue) {
+        // This is the element we're looking for
+        // Now extract the value based on the rest of the path
+        if (sourcePath.endsWith('/label/text()')) {
+          const labelElement = element.querySelector('label');
+          if (labelElement) {
+            row[mapping.header] = extractTextContent(labelElement);
+            return;
+          }
+        } else if (sourcePath.endsWith('/@id')) {
+          row[mapping.header] = element.getAttribute('id') || '';
+          return;
+        } else if (sourcePath.endsWith('/@attributeId')) {
+          row[mapping.header] = element.getAttribute('attributeId') || '';
+          return;
+        }
+      }
+    }
+  }
+  
+  // Handle simple attribute access
+  if (sourcePath.startsWith('@')) {
+    const attrName = sourcePath.substring(1);
+    row[mapping.header] = itemNode.getAttribute(attrName) || '';
+    return;
+  }
+  
+  // Try standard XPath evaluation as a fallback
+  try {
+    const result = evaluateXPath(itemNode, sourcePath, xmlDoc, XPathResult.ANY_TYPE);
+    
+    if (result) {
+      if (result.resultType === XPathResult.STRING_TYPE) {
+        row[mapping.header] = result.stringValue || '';
+      } else if (result.resultType === XPathResult.ORDERED_NODE_ITERATOR_TYPE || 
+                result.resultType === XPathResult.UNORDERED_NODE_ITERATOR_TYPE) {
+        const values: string[] = [];
+        let node = result.iterateNext();
+        
+        while (node) {
+          if (node.nodeType === Node.ELEMENT_NODE) {
+            values.push(extractTextContent(node as Element));
+          } else if (node.nodeType === Node.ATTRIBUTE_NODE) {
+            values.push((node as Attr).value);
+          } else if (node.nodeType === Node.TEXT_NODE) {
+            values.push(node.textContent || '');
+          }
+          node = result.iterateNext();
+        }
+        
+        row[mapping.header] = values.join('\n');
+      } else if (result.resultType === XPathResult.FIRST_ORDERED_NODE_TYPE || 
+                result.resultType === XPathResult.ANY_UNORDERED_NODE_TYPE) {
+        const node = result.singleNodeValue;
+        
+        if (node) {
+          if (node.nodeType === Node.ELEMENT_NODE) {
+            row[mapping.header] = extractTextContent(node as Element);
+          } else if (node.nodeType === Node.ATTRIBUTE_NODE) {
+            row[mapping.header] = (node as Attr).value;
+          } else if (node.nodeType === Node.TEXT_NODE) {
+            row[mapping.header] = node.textContent || '';
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.error(`Failed to evaluate XPath: ${sourcePath}`, e);
+    row[mapping.header] = ''; // Ensure the header exists even if XPath evaluation fails
+  }
+}
+
+/**
+ * Extract text content from an element, handling CDATA sections
+ */
+function extractTextContent(element: Element): string {
+  // Check for CDATA sections
+  for (let i = 0; i < element.childNodes.length; i++) {
+    const node = element.childNodes[i];
+    if (node.nodeType === Node.CDATA_SECTION_NODE) {
+      return node.textContent || '';
+    }
+  }
+  
+  // Fallback to regular text content
+  return element.textContent || '';
+}
+
+/**
+ * Evaluate an XPath expression and return the result
+ */
+function evaluateXPath(contextNode: Node, path: string, xmlDoc: XMLDocument, resultType: number): XPathResult | null {
+  try {
+    return xmlDoc.evaluate(path, contextNode, null, resultType, null);
+  } catch (e) {
+    console.error(`Failed to evaluate XPath: ${path}`, e);
+    return null;
+  }
+}
 
 export function convertToCsv(data: Record<string, any>[], headers: readonly string[], delimiter: ',' | ';' = ','): string {
   if (!data || data.length === 0) return "";

@@ -13,6 +13,7 @@ To provide a user-friendly web application that simplifies the process of conver
 
 *   **File Upload:** Support for uploading CSV and XML files.
 *   **Manufacturer Profiles:** Ability to create and manage profiles with specific XML parsing configurations. Includes auto-detection of XML structure.
+*   **AI-Powered XML Structure Detection:** Intelligent analysis of XML samples to suggest field mappings, with user choice between free models (OpenRouter) and paid models (Requesty.ai).
 *   **Data Mapping:** Mapping of source data fields to standardized output columns, adaptable to different file structures.
 *   **Data Preview:** Interactive tabular display of converted data.
 *   **Builder:** separate set of tools where user can perform extensive data transforms. 
@@ -45,4 +46,9 @@ The project follows a typical Next.js architecture:
 *   React (UI Library)
 *   TypeScript (Language)
 *   Tailwind CSS (Styling)
+*   **OpenRouter.ai** (Access to free AI models for tasks like XML structure detection with fallback mechanism)
+*   **Requesty.ai** (Access to paid AI models for more reliable XML structure detection)
+*   **ShadCN UI** (Component library for consistent UI elements)
+*   **Zod** (TypeScript-first schema declaration and validation for API routes)
+*   **fast-xml-parser** (XML parsing and manipulation)
 *   Other libraries for file parsing (e.g., XML, CSV) and data manipulation as needed.

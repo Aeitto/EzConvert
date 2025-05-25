@@ -8,15 +8,20 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Sparkles, Save, X, AlertCircle, Check, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { XmlProfileFieldMapping } from '@/types/ezconvert';
-import { detectXmlStructure } from '@/lib/xmlDetection';
 
 interface XmlAiDetectionModalProps {
   isOpen: boolean;
   onClose: () => void;
   onDetectionComplete: (rootPath: string, fieldMappings: XmlProfileFieldMapping[]) => void;
+}
+
+interface ApiXPathSuggestion {
+  fieldName: string;
+  xpath: string;
 }
 
 export function XmlAiDetectionModal({ 
@@ -31,14 +36,26 @@ export function XmlAiDetectionModal({
   const [detectedMappings, setDetectedMappings] = useState<XmlProfileFieldMapping[]>([]);
   const [isDetectionComplete, setIsDetectionComplete] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [usedModel, setUsedModel] = useState<string | null>(null);
+  const [usedProvider, setUsedProvider] = useState<string | null>(null);
+  const [selectedProvider, setSelectedProvider] = useState<'openrouter' | 'requesty'>('openrouter');
 
   const handleXmlSampleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setXmlSample(e.target.value);
-    // Reset detection state when sample changes
     setIsDetectionComplete(false);
     setDetectedRootPath('');
     setDetectedMappings([]);
     setError(null);
+  };
+
+  const handleProviderChange = (value: 'openrouter' | 'requesty') => {
+    setSelectedProvider(value);
+    setIsDetectionComplete(false);
+    setDetectedMappings([]);
+    setDetectedRootPath('');
+    setError(null);
+    setUsedModel(null);
+    setUsedProvider(null);
   };
 
   const handleDetectStructure = async () => {
@@ -48,46 +65,78 @@ export function XmlAiDetectionModal({
         description: "Please provide an XML sample to analyze.",
         variant: "destructive"
       });
+      setError("Please provide an XML sample to analyze.");
       return;
     }
 
     setIsAnalyzing(true);
     setError(null);
+    setDetectedMappings([]);
+    setDetectedRootPath('');
+    setIsDetectionComplete(false);
+    setUsedModel(null);
+    setUsedProvider(null);
 
     try {
-      const result = await detectXmlStructure(xmlSample);
-      
-      if (result.rootPath && result.fieldMappings.length > 0) {
-        setDetectedRootPath(result.rootPath);
-        setDetectedMappings(result.fieldMappings);
-        setIsDetectionComplete(true);
-        
-        toast({
-          title: "Detection Complete",
-          description: `Successfully detected ${result.fieldMappings.length} field mappings.`
-        });
-      } else {
-        setError("Could not detect a clear structure in the provided XML. Please ensure it's a valid XML sample containing product/item data.");
-        toast({
-          title: "Detection Failed",
-          description: "Could not identify XML structure. Please check your sample.",
-          variant: "destructive"
-        });
+      const response = await fetch('/api/detect-xml-structure', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          xmlSample,
+          provider: selectedProvider 
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || errorData.details || 'Failed to detect XML structure');
       }
-    } catch (err) {
-      console.error("XML detection error:", err);
-      setError("An error occurred during XML analysis. Please check if your XML is valid.");
+
+      const result = await response.json();
+      
+      // Handle the new response format that includes data, model and provider
+      const suggestions: ApiXPathSuggestion[] = result.data.mappings;
+      const rootPath = result.data.itemRootPath || '';
+      const modelUsed = result.model || 'Unknown';
+      const providerUsed = result.provider || null;
+      
+      setUsedModel(modelUsed);
+      setUsedProvider(providerUsed);
+
+      // Convert API response to the format expected by the application
+      const newMappings: XmlProfileFieldMapping[] = suggestions.map((suggestion: ApiXPathSuggestion) => ({
+        id: crypto.randomUUID(),
+        sourcePath: suggestion.xpath,
+        header: suggestion.fieldName,
+        isDynamicAttributeMapping: false,
+      }));
+
+      setDetectedRootPath(rootPath);
+      setDetectedMappings(newMappings);
+      setIsDetectionComplete(true);
+
       toast({
-        title: "Error",
-        description: "Failed to analyze XML structure. Please try again.",
-        variant: "destructive"
+        title: "XML Analysis Complete",
+        description: `AI analysis complete. Found ${newMappings.length} potential fields.`,
+      });
+
+    } catch (err: any) {
+      console.error("Error during AI XML structure detection:", err);
+      const errorMessage = err.message || "An unknown error occurred during AI analysis.";
+      setError(errorMessage);
+      toast({
+        title: "AI Analysis Failed",
+        description: errorMessage,
+        variant: "destructive",
       });
     } finally {
       setIsAnalyzing(false);
     }
   };
 
-  const handleMappingChange = (index: number, field: keyof XmlProfileFieldMapping, value: string | boolean) => {
+  const handleMappingChange = (index: number, field: keyof XmlProfileFieldMapping, value: any) => {
     setDetectedMappings(currentMappings =>
       currentMappings.map((mapping, i) =>
         i === index ? { ...mapping, [field]: value } : mapping
@@ -138,6 +187,29 @@ export function XmlAiDetectionModal({
           </p>
           
           <div className="space-y-4">
+            <div>
+              <Label htmlFor="api-provider" className="text-sm font-medium">
+                Choose AI Provider
+              </Label>
+              <RadioGroup
+                value={selectedProvider}
+                onValueChange={(value) => handleProviderChange(value as 'openrouter' | 'requesty')}
+                className="flex items-center space-x-4 mb-4"
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="openrouter" id="openrouter" />
+                  <Label htmlFor="openrouter" className="text-sm">
+                    OpenRouter (Free Models)
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="requesty" id="requesty" />
+                  <Label htmlFor="requesty" className="text-sm">
+                    Requesty.ai (Paid Models)
+                  </Label>
+                </div>
+              </RadioGroup>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="xml-sample">XML Sample</Label>
               <Textarea 
@@ -205,9 +277,13 @@ export function XmlAiDetectionModal({
                       onChange={(e) => setDetectedRootPath(e.target.value)}
                       className="font-mono"
                     />
-                    <p className="text-xs text-muted-foreground">
-                      This is the XPath to the repeating element that represents a single product/item.
-                    </p>
+                    {isDetectionComplete && (usedModel || usedProvider) && (
+                      <p className="text-xs text-muted-foreground text-center">
+                        Structure detected using {usedProvider && <span>provider: <span className="font-semibold">{usedProvider}</span></span>}
+                        {usedProvider && usedModel && <span> | </span>}
+                        {usedModel && <span>model: <span className="font-mono">{usedModel}</span></span>}
+                      </p>
+                    )}
                   </div>
                   
                   <div className="space-y-2">

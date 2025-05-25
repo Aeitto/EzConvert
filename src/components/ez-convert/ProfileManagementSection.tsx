@@ -1,14 +1,13 @@
-
 "use client";
 import { useState } from 'react';
 import { useEzConvert } from '@/contexts/EzConvertContext';
+import { XmlDebugger } from './XmlDebugger';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Settings2, PlusCircle, Edit3, Trash2, AlertTriangle, Sparkles } from 'lucide-react';
+import { Settings2, PlusCircle, Edit3, Trash2, AlertTriangle, Bug } from 'lucide-react';
 import { ProfileFormModal } from './ProfileFormModal';
-import { XmlAiDetectionModal } from './XmlAiDetectionModal';
-import type { XmlProfile, XmlProfileFieldMapping } from '@/types/ezconvert';
+import type { XmlProfile } from '@/types/ezconvert';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,10 +20,9 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
-// import type { AutoDetectXmlConfigOutput } from '@/ai/flows/auto-detect-xml-config'; // Removed
-
 
 export function ProfileManagementSection() {
+  const [isDebuggerOpen, setIsDebuggerOpen] = useState<boolean>(false);
   const { 
     fileType, 
     setFileType,
@@ -32,11 +30,9 @@ export function ProfileManagementSection() {
     selectedXmlProfileId, 
     setSelectedXmlProfileId, 
     deleteXmlProfile,
-    // uploadedFile, // No longer needed here for auto-detect
   } = useEzConvert();
   
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
-  const [isAiDetectionModalOpen, setIsAiDetectionModalOpen] = useState(false);
   const [editingProfile, setEditingProfile] = useState<XmlProfile | null>(null);
   const { toast } = useToast();
 
@@ -58,36 +54,12 @@ export function ProfileManagementSection() {
     toast({ title: "Profile Deleted", description: "The XML profile has been deleted." });
   };
 
-  const handleOpenAiDetection = () => {
-    // Ensure file type is set to 'xml' when using AI detection
-    setFileType('xml');
-    setIsAiDetectionModalOpen(true);
-  };
-
-  const handleDetectionComplete = (rootPath: string, fieldMappings: XmlProfileFieldMapping[]) => {
-    // Create a new profile with the detected structure
-    setEditingProfile({
-      id: '',
-      name: 'AI Detected Profile',
-      itemRootPath: rootPath,
-      fieldMappings,
-      createdAt: new Date().toISOString()
-    });
-    
-    // Open the profile form to let the user customize and save the profile
-    setIsProfileModalOpen(true);
-    
-    toast({ 
-      title: "AI Detection Complete", 
-      description: `Successfully detected ${fieldMappings.length} field mappings. Please review and save the profile.` 
-    });
-  };
-
   if (fileType !== 'xml') {
     return null; 
   }
 
   return (
+    <>
     <Card className="shadow-lg">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-xl">
@@ -148,12 +120,19 @@ export function ProfileManagementSection() {
           )}
         </div>
         
-        <div className="flex flex-col sm:flex-row gap-2">
-          <Button onClick={handleAddNewProfile} variant="outline" className="w-full">
+        <div className="flex flex-col gap-2 mt-4">
+          <Button
+            onClick={handleAddNewProfile}
+            className="w-full bg-primary hover:bg-primary/90"
+          >
             <PlusCircle size={16} className="mr-2" /> Create New Profile
           </Button>
-          <Button onClick={handleOpenAiDetection} variant="outline" className="w-full">
-            <Sparkles size={16} className="mr-2" /> AI Detect Structure
+          <Button
+            onClick={() => setIsDebuggerOpen(true)}
+            variant="outline"
+            className="w-full"
+          >
+            <Bug size={16} className="mr-2" /> XML XPath Debugger
           </Button>
         </div>
       </CardContent>
@@ -163,12 +142,11 @@ export function ProfileManagementSection() {
         onClose={() => setIsProfileModalOpen(false)}
         profile={editingProfile}
       />
-      
-      <XmlAiDetectionModal
-        isOpen={isAiDetectionModalOpen}
-        onClose={() => setIsAiDetectionModalOpen(false)}
-        onDetectionComplete={handleDetectionComplete}
-      />
     </Card>
+      <XmlDebugger 
+        isOpen={isDebuggerOpen}
+        onClose={() => setIsDebuggerOpen(false)}
+      />
+    </>
   );
 }
