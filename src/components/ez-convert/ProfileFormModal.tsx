@@ -11,6 +11,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { Checkbox } from '@/components/ui/checkbox';
 import { XmlAiDetectionModal } from './XmlAiDetectionModal';
+import { generateUUID } from '@/lib/utils';
 
 interface ProfileFormModalProps {
   isOpen: boolean;
@@ -29,7 +30,7 @@ export function ProfileFormModal({ isOpen, onClose, profile }: ProfileFormModalP
   const [name, setName] = useState('');
   const [itemRootPath, setItemRootPath] = useState('');
   const [fieldMappings, setFieldMappings] = useState<XmlProfileFieldMapping[]>([
-    { ...initialFieldMapping, id: crypto.randomUUID(), header: suggestedColumnHeaders[0] || 'Header1' }
+    { ...initialFieldMapping, id: generateUUID(), header: suggestedColumnHeaders[0] || 'Header1' }
   ]);
   const { toast } = useToast();
   const baseFormId = useId();
@@ -43,15 +44,15 @@ export function ProfileFormModal({ isOpen, onClose, profile }: ProfileFormModalP
         setFieldMappings(profile.fieldMappings.length > 0 
           ? profile.fieldMappings.map(fm => ({
               ...fm, 
-              id: fm.id || crypto.randomUUID(),
+              id: fm.id || generateUUID(),
               isDynamicAttributeMapping: fm.isDynamicAttributeMapping || false,
             })) 
-          : [{ ...initialFieldMapping, id: crypto.randomUUID(), header: suggestedColumnHeaders[0] || 'Header1' }]
+          : [{ ...initialFieldMapping, id: generateUUID(), header: suggestedColumnHeaders[0] || 'Header1' }]
         );
       } else {
         setName('');
         setItemRootPath('');
-        setFieldMappings([{ ...initialFieldMapping, id: crypto.randomUUID(), header: suggestedColumnHeaders[0] || 'Header1' }]);
+        setFieldMappings([{ ...initialFieldMapping, id: generateUUID(), header: suggestedColumnHeaders[0] || 'Header1' }]);
       }
       setIsAiDetectionModalOpen(false);
     } else {
@@ -72,9 +73,9 @@ export function ProfileFormModal({ isOpen, onClose, profile }: ProfileFormModalP
   };
 
   const addMappingField = () => {
-    setFieldMappings(prevMappings => [
-      ...prevMappings,
-      { ...initialFieldMapping, id: crypto.randomUUID(), header: `Header${prevMappings.length + 1}` }
+    setFieldMappings([
+      ...fieldMappings,
+      { ...initialFieldMapping, id: generateUUID() }
     ]);
   };
 
@@ -110,12 +111,12 @@ export function ProfileFormModal({ isOpen, onClose, profile }: ProfileFormModalP
       // Create or update the profile
       const profileData: XmlProfile = {
         // Ensure we generate a new UUID for new profiles (including AI detected ones with empty id)
-        id: (profile?.id && profile.id.trim()) ? profile.id : crypto.randomUUID(),
+        id: (profile?.id && profile.id.trim()) ? profile.id : generateUUID(),
         name,
         itemRootPath,
         fieldMappings: fieldMappings.map(fm => ({
           ...fm,
-          id: fm.id || crypto.randomUUID(),
+          id: fm.id || generateUUID(),
           isDynamicAttributeMapping: fm.isDynamicAttributeMapping || false,
           // If dynamic and header is empty, ensure it's an empty string not undefined
           header: fm.header || '',

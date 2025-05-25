@@ -403,17 +403,26 @@ async function handleOpenRouterDetection(systemPrompt: string, userPrompt: strin
 async function handleRequestyDetection(systemPrompt: string, userPrompt: string): Promise<NextResponse> {
   // Get the Requesty API key
   const requestyApiKey = process.env.REQUESTY_API_KEY;
+  const requestyDefaultModel = process.env.REQUESTY_DEFAULT_MODEL; // Get the default model
+
   if (!requestyApiKey) {
     return NextResponse.json(
       { error: 'Requesty API key is not configured' },
       { status: 500 }
     );
   }
+
+  if (!requestyDefaultModel) { // Check if the default model is configured
+    return NextResponse.json(
+      { error: 'Requesty default model is not configured' },
+      { status: 500 }
+    );
+  }
   
   try {
-    console.log('Using Requesty.ai for XML detection');
+    console.log('Using Requesty.ai for XML detection with model:', requestyDefaultModel);
     
-    const response = await fetch('https://api.requesty.ai/v1/chat/completions', {
+    const response = await fetch('https://router.requesty.ai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -421,6 +430,7 @@ async function handleRequestyDetection(systemPrompt: string, userPrompt: string)
         'X-Title': 'EzConvert XML Structure Detection'
       },
       body: JSON.stringify({
+        model: requestyDefaultModel, // Add the model to the request body
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }

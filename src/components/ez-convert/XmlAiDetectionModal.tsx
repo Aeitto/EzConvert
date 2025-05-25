@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Sparkles, Save, X, AlertCircle, Check, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { generateUUID } from '@/lib/utils';
 import type { XmlProfileFieldMapping } from '@/types/ezconvert';
 
 interface XmlAiDetectionModalProps {
@@ -107,7 +108,7 @@ export function XmlAiDetectionModal({
 
       // Convert API response to the format expected by the application
       const newMappings: XmlProfileFieldMapping[] = suggestions.map((suggestion: ApiXPathSuggestion) => ({
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         sourcePath: suggestion.xpath,
         header: suggestion.fieldName,
         isDynamicAttributeMapping: false,

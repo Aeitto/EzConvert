@@ -14,7 +14,7 @@ Develop a web application to convert and standardize data, especially from compl
     * ✅ Created user-friendly interface for reviewing and customizing detected mappings
     * ✅ Implemented dual provider system with UI option for switching between OpenRouter (free models) and Requesty.ai (paid models) - 2025-05-25
     * ✅ Added fallback mechanism to handle rate limiting by trying multiple models sequentially - 2025-05-25
-    * Debugging AI XML detection errors (OpenRouter JSON parsing & Requesty.ai HTML response) - 2025-05-25
+    * Debugging AI XML detection errors (OpenRouter JSON parsing & Requesty.ai HTML response - Requesty 404 error fixed) - 2025-05-25
 *   Develop robust error handling for file uploads and data processing.
 *   Develop robust Builder, that allows user to perform extensive operations with provided tools. (In Progress)
     * ✅ Added initial Builder UI with Undo, Redo, and Save buttons
