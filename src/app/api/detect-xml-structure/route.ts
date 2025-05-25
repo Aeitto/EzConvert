@@ -203,6 +203,30 @@ The user will provide an XML snippet. You should return a JSON array of objects,
 
 Only use standard XPath 1.0 syntax that would work in XSLT processors. Avoid XPath 2.0/3.0 specific features.
 
+Special Handling for Dynamic Attributes/Key-Value Pairs:
+Sometimes, field names are not direct XML element names but are contained within the text of an element, often paired with a corresponding value element. This is common for product attributes or specifications.
+For example, you might see a structure like:
+<attributes>
+  <attribute>
+    <name>Color</name>
+    <value>Red</value>
+  </attribute>
+  <attribute>
+    <name>Size</name>
+    <label>Large</label> <!-- Note: the value element might be named 'value', 'label', or similar -->
+  </attribute>
+</attributes>
+In such cases, if you identify a repeating parent element (e.g., 'attribute' in the example) that consistently contains:
+  a) one sub-element holding the field's conceptual name (e.g., 'name'), and
+  b) another sub-element holding that field's value (e.g., 'value', 'label'),
+you MUST:
+1. Use the text content of the 'name' sub-element (e.g., "Color", "Size") as the 'fieldName' in your JSON output.
+2. Construct an XPath that specifically selects the 'value' or 'label' sub-element based on the text content of its sibling 'name' sub-element.
+   For the "Color" example above, assuming 'itemRootPath' is '/product', a suitable XPath would be: "attributes/attribute[name='Color']/value/text()".
+   For the "Size" example: "attributes/attribute[name='Size']/label/text()".
+Adapt the specific tag names (like 'attributes', 'attribute', 'name', 'value', 'label') to match exactly what you find in the provided XML sample.
+Do NOT generate XPaths for the container attributes like 'id' or 'attributeId' on the repeating parent element (e.g., <attribute id="...">) unless they represent actual data fields themselves. Focus on the conceptual name-value pairs.
+
 Example response format:
 [
   {"fieldName": "Product Title", "xpath": "/product/title/text()"},

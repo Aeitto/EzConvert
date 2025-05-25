@@ -10,8 +10,10 @@
 !.yarn/releases
 !.yarn/versions
 
-#local API
+#local files
 .env.local
+.raw_ai_response.txt
+.xml_example.xml
 
 
 # testing
